@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: servidor-cuentas
+
+server:
+  address: ${BIND_ADDRESS:127.0.0.1}
+  port: ${PORT:8080}
