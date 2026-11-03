@@ -13,3 +13,7 @@ server:
 cuentas:
   directorio-datos: ${DATA_DIR:./data}
   tamano-maximo-cuerpo: 4KB
+  clave-firma: ${CLAVE_FIRMA:}
+  duracion-sesion-segundos: ${DURACION_SESION_SEGUNDOS:3600}
+  origenes-permitidos: ${ORIGENES_PERMITIDOS:}
+  produccion: ${PRODUCCION:false}

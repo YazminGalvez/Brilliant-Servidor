@@ -1,6 +1,7 @@
 package com.brilliant.cuentas;
 
 import java.text.Normalizer;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -52,5 +53,21 @@ public class ServicioCuentas {
 
 		String hash = codificador.encode(contrasena);
 		return repositorio.crear(nombreRecortado, hash);
+	}
+
+	public Usuario obtenerCuenta(UUID usuarioId) {
+		return repositorio.buscarPorId(usuarioId)
+				.orElseThrow(() -> new SolicitudInvalidaExcepcion(CodigoError.NO_AUTORIZADO));
+	}
+
+	public void borrarCuenta(UUID usuarioId, String contrasena) {
+		if (contrasena == null) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.CAMPOS_FALTANTES);
+		}
+		Usuario usuario = obtenerCuenta(usuarioId);
+		if (!codificador.matches(contrasena, usuario.hashContrasena())) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.CREDENCIALES_INVALIDAS);
+		}
+		repositorio.borrar(usuarioId);
 	}
 }

@@ -6,7 +6,6 @@ import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 
@@ -20,8 +19,7 @@ class EsquemaPrueba {
 
 	private ConfigurableApplicationContext arrancar(Path directorioDatos) {
 		return new SpringApplicationBuilder(ServidorCuentasAplicacion.class)
-				.web(WebApplicationType.NONE)
-				.run("--cuentas.directorio-datos=" + directorioDatos);
+				.run("--cuentas.directorio-datos=" + directorioDatos, "--server.port=0");
 	}
 
 	@Test

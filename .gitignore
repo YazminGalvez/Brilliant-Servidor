@@ -1,6 +1,8 @@
 target/
 data/
 *.db
+*.bin
+clave-firma*
 .env
 *.p12
 *.jks

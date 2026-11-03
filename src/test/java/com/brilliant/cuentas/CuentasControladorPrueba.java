@@ -199,10 +199,10 @@ class CuentasControladorPrueba {
 	}
 
 	@Test
-	void rutaInexistenteResponde404() throws Exception {
+	void rutaInexistenteSinTokenResponde401() throws Exception {
 		mockMvc.perform(get("/api/v1/no-existe"))
-				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.codigo").value("RECURSO_NO_ENCONTRADO"));
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.codigo").value("NO_AUTORIZADO"));
 	}
 
 	@Test
