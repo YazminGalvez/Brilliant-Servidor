@@ -1,5 +1,6 @@
 package com.brilliant.cuentas.usuarios;
 
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
@@ -27,7 +28,7 @@ public class RepositorioUsuarios {
 	}
 
 	public static String normalizarNombre(String nombre) {
-		return nombre.strip().toLowerCase(Locale.ROOT);
+		return Normalizer.normalize(nombre, Normalizer.Form.NFC).strip().toLowerCase(Locale.ROOT);
 	}
 
 	public Usuario crear(String nombre, String hashContrasena) {

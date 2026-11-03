@@ -12,3 +12,4 @@ server:
 
 cuentas:
   directorio-datos: ${DATA_DIR:./data}
+  tamano-maximo-cuerpo: 4KB

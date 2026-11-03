@@ -62,6 +62,17 @@ class RepositorioUsuariosPrueba {
 	}
 
 	@Test
+	void nombreConAcentoSeComparaSinImportarCodificacionNiMayusculas() {
+		Usuario creado = repositorio.crear("Ñandú", "hash-1");
+
+		assertThat(creado.nombreNormalizado()).isEqualTo("ñandú");
+		assertThat(repositorio.buscarPorNombre("Ñandú")).contains(creado);
+		assertThat(repositorio.buscarPorNombre("ÑANDÚ")).contains(creado);
+		assertThatThrownBy(() -> repositorio.crear("ñandú", "hash-2"))
+				.isInstanceOf(NombreUsuarioDuplicadoExcepcion.class);
+	}
+
+	@Test
 	void nombreDuplicadoLanzaExcepcionPropia() {
 		Usuario original = repositorio.crear("Luis", "hash-1");
 
