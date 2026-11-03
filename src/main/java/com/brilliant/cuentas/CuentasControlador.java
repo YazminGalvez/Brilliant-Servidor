@@ -10,7 +10,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.brilliant.cuentas.seguridad.LimitadorIntentos;
 import com.brilliant.cuentas.seguridad.UsuarioAutenticado;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/v1/cuentas")
@@ -36,7 +39,7 @@ public class CuentasControlador {
 	@DeleteMapping("/yo")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void borrarCuenta(@AuthenticationPrincipal UsuarioAutenticado usuario,
-			@RequestBody SolicitudBorrarCuenta solicitud) {
-		servicio.borrarCuenta(usuario.usuarioId(), solicitud.contrasena());
+			@RequestBody SolicitudBorrarCuenta solicitud, HttpServletRequest peticion) {
+		servicio.borrarCuenta(usuario.usuarioId(), solicitud.contrasena(), LimitadorIntentos.ipDe(peticion));
 	}
 }

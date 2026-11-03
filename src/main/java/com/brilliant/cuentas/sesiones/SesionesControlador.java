@@ -9,7 +9,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.brilliant.cuentas.seguridad.LimitadorIntentos;
 import com.brilliant.cuentas.seguridad.UsuarioAutenticado;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/v1/sesiones")
@@ -22,8 +25,8 @@ public class SesionesControlador {
 	}
 
 	@PostMapping
-	public RespuestaSesion iniciarSesion(@RequestBody SolicitudInicioSesion solicitud) {
-		return servicio.iniciarSesion(solicitud.nombre(), solicitud.contrasena());
+	public RespuestaSesion iniciarSesion(@RequestBody SolicitudInicioSesion solicitud, HttpServletRequest peticion) {
+		return servicio.iniciarSesion(solicitud.nombre(), solicitud.contrasena(), LimitadorIntentos.ipDe(peticion));
 	}
 
 	@DeleteMapping("/actual")

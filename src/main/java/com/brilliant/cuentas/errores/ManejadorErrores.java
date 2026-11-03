@@ -2,6 +2,7 @@ package com.brilliant.cuentas.errores;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.ErrorResponse;
@@ -32,6 +33,14 @@ public class ManejadorErrores {
 	@ExceptionHandler(NombreUsuarioDuplicadoExcepcion.class)
 	public ResponseEntity<RespuestaError> nombreEnUso() {
 		return responder(CodigoError.NOMBRE_EN_USO);
+	}
+
+	@ExceptionHandler(DemasiadosIntentosExcepcion.class)
+	public ResponseEntity<RespuestaError> demasiadosIntentos(DemasiadosIntentosExcepcion excepcion) {
+		CodigoError codigo = CodigoError.DEMASIADOS_INTENTOS;
+		return ResponseEntity.status(codigo.estado())
+				.header(HttpHeaders.RETRY_AFTER, String.valueOf(excepcion.segundosRestantes()))
+				.body(RespuestaError.de(codigo));
 	}
 
 	@ExceptionHandler(HttpMessageNotReadableException.class)

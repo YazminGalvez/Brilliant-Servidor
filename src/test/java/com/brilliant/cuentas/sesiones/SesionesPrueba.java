@@ -55,6 +55,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 
 @SpringBootTest(properties = {
+		"cuentas.max-intentos-fallidos=1000",
 		"logging.level.org.springframework.security=DEBUG",
 		"logging.level.org.springframework.web=DEBUG",
 		"logging.level.com.brilliant=DEBUG" })

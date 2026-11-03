@@ -16,6 +16,8 @@ public enum CodigoError {
 	CREDENCIALES_INVALIDAS(HttpStatus.UNAUTHORIZED, "El nombre o la contraseña no son correctos."),
 	NO_AUTORIZADO(HttpStatus.UNAUTHORIZED, "Se requiere iniciar sesión."),
 	ACCESO_DENEGADO(HttpStatus.FORBIDDEN, "No tienes permiso para esta acción."),
+	DEMASIADOS_INTENTOS(HttpStatus.TOO_MANY_REQUESTS,
+			"Demasiados intentos fallidos. Espera un momento antes de volver a intentarlo."),
 	RECURSO_NO_ENCONTRADO(HttpStatus.NOT_FOUND, "El recurso no existe."),
 	METODO_NO_PERMITIDO(HttpStatus.METHOD_NOT_ALLOWED, "El método no está permitido."),
 	TIPO_CONTENIDO_NO_SOPORTADO(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "El tipo de contenido no está soportado."),

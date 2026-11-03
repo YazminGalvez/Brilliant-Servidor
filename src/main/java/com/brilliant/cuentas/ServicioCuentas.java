@@ -8,7 +8,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.brilliant.cuentas.errores.CodigoError;
+import com.brilliant.cuentas.errores.DemasiadosIntentosExcepcion;
 import com.brilliant.cuentas.errores.SolicitudInvalidaExcepcion;
+import com.brilliant.cuentas.seguridad.LimitadorIntentos;
 import com.brilliant.cuentas.usuarios.RepositorioUsuarios;
 import com.brilliant.cuentas.usuarios.Usuario;
 
@@ -22,12 +24,14 @@ public class ServicioCuentas {
 	private final RepositorioUsuarios repositorio;
 	private final PasswordEncoder codificador;
 	private final ListaContrasenasComunes contrasenasComunes;
+	private final LimitadorIntentos limitador;
 
 	public ServicioCuentas(RepositorioUsuarios repositorio, PasswordEncoder codificador,
-			ListaContrasenasComunes contrasenasComunes) {
+			ListaContrasenasComunes contrasenasComunes, LimitadorIntentos limitador) {
 		this.repositorio = repositorio;
 		this.codificador = codificador;
 		this.contrasenasComunes = contrasenasComunes;
+		this.limitador = limitador;
 	}
 
 	public Usuario crearCuenta(String nombre, String contrasena) {
@@ -60,14 +64,19 @@ public class ServicioCuentas {
 				.orElseThrow(() -> new SolicitudInvalidaExcepcion(CodigoError.NO_AUTORIZADO));
 	}
 
-	public void borrarCuenta(UUID usuarioId, String contrasena) {
+	public void borrarCuenta(UUID usuarioId, String contrasena, String ip) {
 		if (contrasena == null) {
 			throw new SolicitudInvalidaExcepcion(CodigoError.CAMPOS_FALTANTES);
 		}
 		Usuario usuario = obtenerCuenta(usuarioId);
+		limitador.tiempoBloqueado(usuario.nombre(), ip).ifPresent(restante -> {
+			throw new DemasiadosIntentosExcepcion(restante);
+		});
 		if (!codificador.matches(contrasena, usuario.hashContrasena())) {
+			limitador.registrarFallo(usuario.nombre(), ip);
 			throw new SolicitudInvalidaExcepcion(CodigoError.CREDENCIALES_INVALIDAS);
 		}
 		repositorio.borrar(usuarioId);
+		limitador.reiniciarUsuario(usuario.nombre());
 	}
 }

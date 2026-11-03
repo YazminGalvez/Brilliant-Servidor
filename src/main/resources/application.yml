@@ -9,6 +9,7 @@ spring:
 server:
   address: ${BIND_ADDRESS:127.0.0.1}
   port: ${PORT:8080}
+  forward-headers-strategy: none
 
 cuentas:
   directorio-datos: ${DATA_DIR:./data}
@@ -17,3 +18,5 @@ cuentas:
   duracion-sesion-segundos: ${DURACION_SESION_SEGUNDOS:3600}
   origenes-permitidos: ${ORIGENES_PERMITIDOS:}
   produccion: ${PRODUCCION:false}
+  max-intentos-fallidos: ${MAX_INTENTOS_FALLIDOS:5}
+  bloqueo-segundos: ${BLOQUEO_SEGUNDOS:300}
