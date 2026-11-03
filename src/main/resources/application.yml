@@ -1,7 +1,14 @@
 spring:
   application:
     name: servidor-cuentas
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:esquema.sql
 
 server:
   address: ${BIND_ADDRESS:127.0.0.1}
   port: ${PORT:8080}
+
+cuentas:
+  directorio-datos: ${DATA_DIR:./data}
