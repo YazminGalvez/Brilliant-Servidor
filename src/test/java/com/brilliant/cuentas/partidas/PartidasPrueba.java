@@ -1,15 +1,18 @@
 package com.brilliant.cuentas.partidas;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -23,6 +26,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
@@ -32,12 +36,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import com.brilliant.cuentas.ConfiguracionRelojPrueba;
+import com.brilliant.cuentas.RelojPrueba;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @DirtiesContext
+@Import(ConfiguracionRelojPrueba.class)
 class PartidasPrueba {
 
 	private static final String CONTRASENA = "Clave-segura-91";
@@ -56,6 +63,9 @@ class PartidasPrueba {
 
 	@Autowired
 	private ObjectMapper mapeador;
+
+	@Autowired
+	private RelojPrueba reloj;
 
 	private String json(Object valor) throws Exception {
 		return mapeador.writeValueAsString(valor);
@@ -88,6 +98,11 @@ class PartidasPrueba {
 		String respuesta = crear(token, 1, jugadores).andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		return mapeador.readTree(respuesta).get("codigo").asText();
+	}
+
+	private ResultActions unirse(String token, String codigo) throws Exception {
+		return mockMvc.perform(con(post("/api/v1/partidas/unirse"), token)
+				.contentType(MediaType.APPLICATION_JSON).content(json(Map.of("codigo", codigo))));
 	}
 
 	private ResultActions consultar(String token, String codigo) throws Exception {
@@ -152,11 +167,51 @@ class PartidasPrueba {
 	}
 
 	@Test
+	void unirseConMinusculasYEspacios() throws Exception {
+		String ana = jugadorNuevo("bea");
+		String luis = jugadorNuevo("luis");
+		String codigo = codigoNuevo(ana, 4);
+
+		unirse(luis, "  " + codigo.toLowerCase(Locale.ROOT) + " ")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.codigo").value(codigo))
+				.andExpect(jsonPath("$.anfitrion").value("bea"))
+				.andExpect(jsonPath("$.jugadores[*].nombre", contains("bea", "luis")));
+	}
+
+	@Test
+	void volverAEntrarNoDuplicaAlJugador() throws Exception {
+		String anfitrion = jugadorNuevo("carla");
+		String invitado = jugadorNuevo("dario");
+		String codigo = codigoNuevo(anfitrion, 2);
+
+		unirse(invitado, codigo).andExpect(status().isOk());
+		unirse(invitado, codigo).andExpect(status().isOk()).andExpect(jsonPath("$.jugadores", hasSize(2)));
+		unirse(anfitrion, codigo).andExpect(status().isOk()).andExpect(jsonPath("$.jugadores", hasSize(2)));
+	}
+
+	@Test
+	void salaLlenaResponde409() throws Exception {
+		String anfitrion = jugadorNuevo("elena");
+		String codigo = codigoNuevo(anfitrion, 2);
+		unirse(jugadorNuevo("fabian"), codigo).andExpect(status().isOk());
+
+		String tercero = jugadorNuevo("gabriel");
+		unirse(tercero, codigo)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("PARTIDA_LLENA"));
+		actual(tercero).andExpect(status().isNoContent());
+	}
+
+	@Test
 	void sinTokenResponde401() throws Exception {
 		mockMvc.perform(post("/api/v1/partidas").contentType(MediaType.APPLICATION_JSON)
 						.content("{\"mapa\":1,\"jugadores\":2}"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.codigo").value("NO_AUTORIZADO"));
+		mockMvc.perform(post("/api/v1/partidas/unirse").contentType(MediaType.APPLICATION_JSON)
+						.content("{\"codigo\":\"ABCDEF\"}"))
+				.andExpect(status().isUnauthorized());
 		mockMvc.perform(get("/api/v1/partidas/actual")).andExpect(status().isUnauthorized());
 		mockMvc.perform(get("/api/v1/partidas/ABCDEF")).andExpect(status().isUnauthorized());
 		consultar("token-falso", "ABCDEF").andExpect(status().isUnauthorized());
@@ -173,7 +228,6 @@ class PartidasPrueba {
 		String inexistente = consultar(ajeno, "ZZZZZZ").andReturn().getResponse().getContentAsString();
 
 		assertThat(existente).isEqualTo(inexistente);
-		consultar(anfitrion, codigo).andExpect(status().isOk());
 	}
 
 	@Test
@@ -196,14 +250,104 @@ class PartidasPrueba {
 	}
 
 	@Test
-	void crearEstandoEnOtraSalaLaDeja() throws Exception {
-		String token = jugadorNuevo("lucia");
-		String primera = codigoNuevo(token, 4);
+	void crearEstandoEnOtraSalaLoSacaDeLaAnterior() throws Exception {
+		String anfitrion = jugadorNuevo("lucia");
+		String invitado = jugadorNuevo("mario");
+		String primera = codigoNuevo(anfitrion, 4);
+		unirse(invitado, primera).andExpect(status().isOk());
 
-		String segunda = codigoNuevo(token, 2);
+		String segunda = codigoNuevo(invitado, 4);
 
-		assertThat(segunda).isNotEqualTo(primera);
-		esperarNoEncontrada(consultar(token, primera));
-		actual(token).andExpect(jsonPath("$.codigo").value(segunda)).andExpect(jsonPath("$.capacidad").value(2));
+		consultar(anfitrion, primera).andExpect(jsonPath("$.jugadores[*].nombre", contains("lucia")));
+		esperarNoEncontrada(consultar(invitado, primera));
+		actual(invitado).andExpect(jsonPath("$.codigo").value(segunda));
+	}
+
+	@Test
+	void siElAnfitrionCreaOtraSalaLaAnteriorSeCierraParaTodos() throws Exception {
+		String anfitrion = jugadorNuevo("nora");
+		String invitado = jugadorNuevo("oscar");
+		String primera = codigoNuevo(anfitrion, 4);
+		unirse(invitado, primera).andExpect(status().isOk());
+
+		codigoNuevo(anfitrion, 4);
+
+		esperarNoEncontrada(consultar(invitado, primera));
+		actual(invitado).andExpect(status().isNoContent());
+		esperarNoEncontrada(unirse(jugadorNuevo("pablo"), primera));
+	}
+
+	@Test
+	void unirseAOtraSalaSacaDeLaAnterior() throws Exception {
+		String primeraAnfitriona = jugadorNuevo("raquel");
+		String segundaAnfitriona = jugadorNuevo("sara");
+		String invitado = jugadorNuevo("tomas");
+		String primera = codigoNuevo(primeraAnfitriona, 4);
+		String segunda = codigoNuevo(segundaAnfitriona, 4);
+		unirse(invitado, primera).andExpect(status().isOk());
+
+		unirse(invitado, segunda).andExpect(status().isOk());
+
+		consultar(primeraAnfitriona, primera).andExpect(jsonPath("$.jugadores[*].nombre", contains("raquel")));
+		actual(invitado).andExpect(jsonPath("$.codigo").value(segunda));
+	}
+
+	@Test
+	void consultarCuentaComoSenalDeConexion() throws Exception {
+		String anfitrion = jugadorNuevo("ursula");
+		String invitado = jugadorNuevo("victor");
+		String codigo = codigoNuevo(anfitrion, 2);
+		unirse(invitado, codigo).andExpect(status().isOk());
+
+		reloj.avanzar(ServicioPartidas.TOLERANCIA_CONEXION);
+		consultar(anfitrion, codigo)
+				.andExpect(jsonPath("$.jugadores[0].conectado").value(true))
+				.andExpect(jsonPath("$.jugadores[1].conectado").value(false));
+
+		consultar(invitado, codigo).andExpect(jsonPath("$.jugadores[1].conectado").value(true));
+	}
+
+	@Test
+	void muchosCodigosInexistentesResponden429() throws Exception {
+		String anfitrion = jugadorNuevo("walter");
+		String adivinador = jugadorNuevo("ximena");
+		String codigo = codigoNuevo(anfitrion, 4);
+
+		for (int i = 0; i < 10; i++) {
+			esperarNoEncontrada(unirse(adivinador, "ZZZZZ" + i));
+		}
+		unirse(adivinador, codigo)
+				.andExpect(status().isTooManyRequests())
+				.andExpect(header().string(HttpHeaders.RETRY_AFTER, "60"))
+				.andExpect(jsonPath("$.codigo").value("DEMASIADOS_INTENTOS"));
+
+		unirse(anfitrion, "ZZZZZZ").andExpect(status().isNotFound());
+
+		reloj.avanzar(Duration.ofSeconds(60));
+		unirse(adivinador, codigo).andExpect(status().isOk());
+	}
+
+	@Test
+	void unirseBienReiniciaElContadorDeCodigos() throws Exception {
+		String anfitrion = jugadorNuevo("yolanda");
+		String jugador = jugadorNuevo("zoe");
+		String codigo = codigoNuevo(anfitrion, 4);
+
+		for (int i = 0; i < 9; i++) {
+			esperarNoEncontrada(unirse(jugador, "YYYYY" + i));
+		}
+		unirse(jugador, codigo).andExpect(status().isOk());
+		for (int i = 0; i < 9; i++) {
+			esperarNoEncontrada(unirse(jugador, "XXXXX" + i));
+		}
+		unirse(jugador, codigo).andExpect(status().isOk());
+	}
+
+	@Test
+	void unirseSinCodigoResponde400() throws Exception {
+		mockMvc.perform(con(post("/api/v1/partidas/unirse"), jugadorNuevo("adrian"))
+						.contentType(MediaType.APPLICATION_JSON).content("{}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
 	}
 }

@@ -47,7 +47,7 @@ class ServicioPartidasPrueba {
 
 	@Test
 	void noRepiteCodigosDeSalasVivas() {
-		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(),
+		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
 				generadorRepetido("AAAAAA", "AAAAAA", "BBBBBB", "AAAAAA", "BBBBBB", "CCCCCC"), reloj);
 
 		String primero = servicio.crear(UUID.randomUUID(), 1, 2).codigo();
@@ -59,7 +59,8 @@ class ServicioPartidasPrueba {
 
 	@Test
 	void muchasSalasTienenCodigosDistintos() {
-		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), new CodigoSala(), reloj);
+		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
+				new CodigoSala(), reloj);
 		Set<String> codigos = new HashSet<>();
 
 		for (int i = 0; i < 500; i++) {
@@ -73,7 +74,8 @@ class ServicioPartidasPrueba {
 
 	@Test
 	void codigoCerradoSePuedeReutilizar() {
-		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), generadorRepetido("AAAAAA", "BBBBBB"), reloj);
+		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
+				generadorRepetido("AAAAAA", "BBBBBB"), reloj);
 		UUID anfitrion = UUID.randomUUID();
 
 		assertThat(servicio.crear(anfitrion, 1, 2).codigo()).isEqualTo("AAAAAA");

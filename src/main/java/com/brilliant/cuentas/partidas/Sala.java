@@ -33,6 +33,10 @@ public class Sala {
 		return capacidad;
 	}
 
+	public boolean esAnfitrion(UUID usuarioId) {
+		return anfitrionId.equals(usuarioId);
+	}
+
 	public JugadorEnSala anfitrion() {
 		return jugadores.get(anfitrionId);
 	}
@@ -45,7 +49,15 @@ public class Sala {
 		return new ArrayList<>(jugadores.values());
 	}
 
+	public boolean estaLlena() {
+		return jugadores.size() >= capacidad;
+	}
+
 	public void agregar(JugadorEnSala jugador) {
 		jugadores.put(jugador.usuarioId(), jugador);
+	}
+
+	public void quitar(UUID usuarioId) {
+		jugadores.remove(usuarioId);
 	}
 }

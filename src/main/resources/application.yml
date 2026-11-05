@@ -20,3 +20,4 @@ cuentas:
   produccion: ${PRODUCCION:false}
   max-intentos-fallidos: ${MAX_INTENTOS_FALLIDOS:5}
   bloqueo-segundos: ${BLOQUEO_SEGUNDOS:300}
+  max-failed-codes: ${MAX_CODIGOS_FALLIDOS:10}

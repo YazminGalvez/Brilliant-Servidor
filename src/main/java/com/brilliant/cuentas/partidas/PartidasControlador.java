@@ -30,6 +30,12 @@ public class PartidasControlador {
 		return servicio.crear(usuario.usuarioId(), solicitud.mapa(), solicitud.jugadores());
 	}
 
+	@PostMapping("/unirse")
+	public RespuestaSala unirse(@AuthenticationPrincipal UsuarioAutenticado usuario,
+			@RequestBody SolicitudUnirsePartida solicitud) {
+		return servicio.unirse(usuario.usuarioId(), solicitud.codigo());
+	}
+
 	@GetMapping("/actual")
 	public ResponseEntity<RespuestaSala> actual(@AuthenticationPrincipal UsuarioAutenticado usuario) {
 		return servicio.actual(usuario.usuarioId())
