@@ -16,6 +16,8 @@ public enum CodigoError {
 	CREDENCIALES_INVALIDAS(HttpStatus.UNAUTHORIZED, "El nombre o la contraseña no son correctos."),
 	NO_AUTORIZADO(HttpStatus.UNAUTHORIZED, "Se requiere iniciar sesión."),
 	ACCESO_DENEGADO(HttpStatus.FORBIDDEN, "No tienes permiso para esta acción."),
+	DATOS_INVALIDOS(HttpStatus.BAD_REQUEST, "Los datos de la partida no son válidos."),
+	PARTIDA_NO_ENCONTRADA(HttpStatus.NOT_FOUND, "La partida no existe."),
 	DEMASIADOS_INTENTOS(HttpStatus.TOO_MANY_REQUESTS,
 			"Demasiados intentos fallidos. Espera un momento antes de volver a intentarlo."),
 	RECURSO_NO_ENCONTRADO(HttpStatus.NOT_FOUND, "El recurso no existe."),

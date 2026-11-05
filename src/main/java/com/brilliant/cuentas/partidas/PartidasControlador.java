@@ -1,0 +1,45 @@
+package com.brilliant.cuentas.partidas;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.brilliant.cuentas.seguridad.UsuarioAutenticado;
+
+@RestController
+@RequestMapping("/api/v1/partidas")
+public class PartidasControlador {
+
+	private final ServicioPartidas servicio;
+
+	public PartidasControlador(ServicioPartidas servicio) {
+		this.servicio = servicio;
+	}
+
+	@PostMapping
+	@ResponseStatus(HttpStatus.CREATED)
+	public RespuestaSala crear(@AuthenticationPrincipal UsuarioAutenticado usuario,
+			@RequestBody SolicitudCrearPartida solicitud) {
+		return servicio.crear(usuario.usuarioId(), solicitud.mapa(), solicitud.jugadores());
+	}
+
+	@GetMapping("/actual")
+	public ResponseEntity<RespuestaSala> actual(@AuthenticationPrincipal UsuarioAutenticado usuario) {
+		return servicio.actual(usuario.usuarioId())
+				.map(ResponseEntity::ok)
+				.orElseGet(() -> ResponseEntity.noContent().build());
+	}
+
+	@GetMapping("/{codigo}")
+	public RespuestaSala consultar(@AuthenticationPrincipal UsuarioAutenticado usuario,
+			@PathVariable String codigo) {
+		return servicio.consultar(usuario.usuarioId(), codigo);
+	}
+}
