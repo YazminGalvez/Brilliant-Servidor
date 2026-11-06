@@ -1,6 +1,7 @@
 package com.brilliant.cuentas.partidas;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -48,7 +49,7 @@ class ServicioPartidasPrueba {
 	@Test
 	void noRepiteCodigosDeSalasVivas() {
 		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
-				generadorRepetido("AAAAAA", "AAAAAA", "BBBBBB", "AAAAAA", "BBBBBB", "CCCCCC"), reloj);
+				generadorRepetido("AAAAAA", "AAAAAA", "BBBBBB", "AAAAAA", "BBBBBB", "CCCCCC"), reloj, 120);
 
 		String primero = servicio.crear(UUID.randomUUID(), 1, 2).codigo();
 		String segundo = servicio.crear(UUID.randomUUID(), 1, 2).codigo();
@@ -60,7 +61,7 @@ class ServicioPartidasPrueba {
 	@Test
 	void muchasSalasTienenCodigosDistintos() {
 		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
-				new CodigoSala(), reloj);
+				new CodigoSala(), reloj, 120);
 		Set<String> codigos = new HashSet<>();
 
 		for (int i = 0; i < 500; i++) {
@@ -73,9 +74,17 @@ class ServicioPartidasPrueba {
 	}
 
 	@Test
+	void rechazaSegundosSinContactoNoPositivos() {
+		assertThatThrownBy(() -> new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
+				new CodigoSala(), reloj, 0))
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("SEGUNDOS_SIN_CONTACTO_SALA");
+	}
+
+	@Test
 	void codigoCerradoSePuedeReutilizar() {
 		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
-				generadorRepetido("AAAAAA", "BBBBBB"), reloj);
+				generadorRepetido("AAAAAA", "BBBBBB"), reloj, 120);
 		UUID anfitrion = UUID.randomUUID();
 
 		assertThat(servicio.crear(anfitrion, 1, 2).codigo()).isEqualTo("AAAAAA");

@@ -21,3 +21,4 @@ cuentas:
   max-intentos-fallidos: ${MAX_INTENTOS_FALLIDOS:5}
   bloqueo-segundos: ${BLOQUEO_SEGUNDOS:300}
   max-failed-codes: ${MAX_CODIGOS_FALLIDOS:10}
+  room-idle-seconds: ${SEGUNDOS_SIN_CONTACTO_SALA:120}

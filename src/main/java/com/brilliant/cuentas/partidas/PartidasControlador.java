@@ -49,6 +49,12 @@ public class PartidasControlador {
 		return servicio.marcarListo(usuario.usuarioId(), codigo, solicitud.listo());
 	}
 
+	@PostMapping("/{codigo}/salir")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void salir(@AuthenticationPrincipal UsuarioAutenticado usuario, @PathVariable String codigo) {
+		servicio.salir(usuario.usuarioId(), codigo);
+	}
+
 	@GetMapping("/{codigo}")
 	public RespuestaSala consultar(@AuthenticationPrincipal UsuarioAutenticado usuario,
 			@PathVariable String codigo) {

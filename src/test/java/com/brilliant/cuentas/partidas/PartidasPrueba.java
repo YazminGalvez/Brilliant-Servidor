@@ -120,6 +120,10 @@ class PartidasPrueba {
 				.contentType(MediaType.APPLICATION_JSON).content(json(cuerpo)));
 	}
 
+	private ResultActions salir(String token, String codigo) throws Exception {
+		return mockMvc.perform(con(post("/api/v1/partidas/" + codigo + "/salir"), token));
+	}
+
 	private String partidaComenzada(String anfitrion, String invitado) throws Exception {
 		String codigo = codigoNuevo(anfitrion, 2);
 		unirse(invitado, codigo).andExpect(status().isOk());
@@ -235,6 +239,112 @@ class PartidasPrueba {
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.codigo").value("NO_AUTORIZADO"));
 		listo("token-falso", "ABCDEF", true).andExpect(status().isUnauthorized());
+		mockMvc.perform(post("/api/v1/partidas/ABCDEF/salir"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.codigo").value("NO_AUTORIZADO"));
+		salir("token-falso", "ABCDEF").andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void salirDelAnfitrionCierraLaSalaParaTodos() throws Exception {
+		String anfitrion = jugadorNuevo("cierra-ana");
+		String invitado = jugadorNuevo("cierra-beto");
+		String codigo = codigoNuevo(anfitrion, 4);
+		unirse(invitado, codigo).andExpect(status().isOk());
+
+		salir(anfitrion, codigo).andExpect(status().isNoContent()).andExpect(content().string(""));
+
+		esperarNoEncontrada(consultar(invitado, codigo));
+		actual(invitado).andExpect(status().isNoContent());
+		actual(anfitrion).andExpect(status().isNoContent());
+		esperarNoEncontrada(unirse(jugadorNuevo("cierra-ciro"), codigo));
+	}
+
+	@Test
+	void unInvitadoQueSaleDejaLibreSuLugar() throws Exception {
+		String anfitrion = jugadorNuevo("libre-ana");
+		String invitado = jugadorNuevo("libre-beto");
+		String codigo = codigoNuevo(anfitrion, 2);
+		unirse(invitado, codigo).andExpect(status().isOk());
+
+		salir(invitado, codigo.toLowerCase(Locale.ROOT)).andExpect(status().isNoContent());
+
+		consultar(anfitrion, codigo).andExpect(jsonPath("$.jugadores[*].nombre", contains("libre-ana")));
+		actual(invitado).andExpect(status().isNoContent());
+		unirse(jugadorNuevo("libre-ciro"), codigo)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.jugadores[*].nombre", contains("libre-ana", "libre-ciro")));
+	}
+
+	@Test
+	void laSalaSinJugadoresDesaparece() throws Exception {
+		String anfitrion = jugadorNuevo("vacia-ana");
+		String invitado = jugadorNuevo("vacia-beto");
+		String codigo = partidaComenzada(anfitrion, invitado);
+
+		salir(anfitrion, codigo).andExpect(status().isNoContent());
+		consultar(invitado, codigo)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.anfitrion").value("vacia-ana"))
+				.andExpect(jsonPath("$.jugadores[*].nombre", contains("vacia-beto")));
+
+		salir(invitado, codigo).andExpect(status().isNoContent());
+		esperarNoEncontrada(unirse(jugadorNuevo("vacia-ciro"), codigo));
+	}
+
+	@Test
+	void unInvitadoSinContactoSaleDeLaSala() throws Exception {
+		String anfitrion = jugadorNuevo("ausente-ana");
+		String invitado = jugadorNuevo("ausente-beto");
+		String codigo = codigoNuevo(anfitrion, 4);
+		unirse(invitado, codigo).andExpect(status().isOk());
+
+		reloj.avanzar(Duration.ofSeconds(119));
+		consultar(anfitrion, codigo).andExpect(jsonPath("$.jugadores", hasSize(2)));
+
+		reloj.avanzar(Duration.ofSeconds(1));
+		consultar(anfitrion, codigo).andExpect(jsonPath("$.jugadores[*].nombre", contains("ausente-ana")));
+		actual(invitado).andExpect(status().isNoContent());
+	}
+
+	@Test
+	void unAnfitrionSinContactoCierraLaSala() throws Exception {
+		String anfitrion = jugadorNuevo("dormido-ana");
+		String invitado = jugadorNuevo("dormido-beto");
+		String codigo = codigoNuevo(anfitrion, 4);
+		unirse(invitado, codigo).andExpect(status().isOk());
+
+		reloj.avanzar(Duration.ofSeconds(60));
+		consultar(invitado, codigo).andExpect(status().isOk());
+		reloj.avanzar(Duration.ofSeconds(60));
+
+		esperarNoEncontrada(consultar(invitado, codigo));
+		actual(anfitrion).andExpect(status().isNoContent());
+	}
+
+	@Test
+	void laFaltaDeContactoNoSacaDeUnaPartidaComenzada() throws Exception {
+		String anfitrion = jugadorNuevo("jugando-ana");
+		String invitado = jugadorNuevo("jugando-beto");
+		String codigo = partidaComenzada(anfitrion, invitado);
+
+		reloj.avanzar(Duration.ofSeconds(300));
+
+		consultar(invitado, codigo).andExpect(jsonPath("$.jugadores", hasSize(2)));
+	}
+
+	@Test
+	void salirDeUnaSalaAjenaResponde404() throws Exception {
+		String anfitrion = jugadorNuevo("ajena-ana");
+		String otro = jugadorNuevo("ajena-beto");
+		String codigo = codigoNuevo(anfitrion, 4);
+		String suSala = codigoNuevo(otro, 4);
+
+		esperarNoEncontrada(salir(otro, codigo));
+		esperarNoEncontrada(salir(otro, "ZZZZZZ"));
+
+		consultar(anfitrion, codigo).andExpect(status().isOk());
+		actual(otro).andExpect(jsonPath("$.codigo").value(suSala));
 	}
 
 	@Test

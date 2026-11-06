@@ -36,7 +36,7 @@ public record RespuestaSala(
 				.map(jugador -> new Jugador(jugador.nombre(), jugador.listo(), false,
 						jugador.conectadoEn(ahora, toleranciaConexion), false, false))
 				.toList();
-		return new RespuestaSala(sala.codigo(), sala.mapa(), sala.capacidad(), sala.anfitrion().nombre(), jugadores,
+		return new RespuestaSala(sala.codigo(), sala.mapa(), sala.capacidad(), sala.nombreAnfitrion(), jugadores,
 				sala.comenzada(), false, 0, List.of(), List.of(), Map.of(), Map.of(), 0, List.of(), null);
 	}
 }

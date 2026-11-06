@@ -12,14 +12,17 @@ public class Sala {
 	private final int mapa;
 	private final int capacidad;
 	private final UUID anfitrionId;
+	private final String nombreAnfitrion;
 	private final Map<UUID, JugadorEnSala> jugadores = new LinkedHashMap<>();
 	private boolean comenzada;
 
-	public Sala(String codigo, int mapa, int capacidad, UUID anfitrionId) {
+	public Sala(String codigo, int mapa, int capacidad, JugadorEnSala anfitrion) {
 		this.codigo = codigo;
 		this.mapa = mapa;
 		this.capacidad = capacidad;
-		this.anfitrionId = anfitrionId;
+		this.anfitrionId = anfitrion.usuarioId();
+		this.nombreAnfitrion = anfitrion.nombre();
+		agregar(anfitrion);
 	}
 
 	public String codigo() {
@@ -38,8 +41,8 @@ public class Sala {
 		return anfitrionId.equals(usuarioId);
 	}
 
-	public JugadorEnSala anfitrion() {
-		return jugadores.get(anfitrionId);
+	public String nombreAnfitrion() {
+		return nombreAnfitrion;
 	}
 
 	public JugadorEnSala jugador(UUID usuarioId) {

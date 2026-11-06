@@ -4,10 +4,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.brilliant.cuentas.ServicioCuentas;
@@ -28,13 +30,18 @@ public class ServicioPartidas {
 	private final LimitadorCodigos limitador;
 	private final CodigoSala generadorCodigos;
 	private final Clock reloj;
+	private final Duration limiteSinContacto;
 
 	public ServicioPartidas(ServicioCuentas servicioCuentas, LimitadorCodigos limitador, CodigoSala generadorCodigos,
-			Clock reloj) {
+			Clock reloj, @Value("${cuentas.room-idle-seconds}") long segundosSinContacto) {
+		if (segundosSinContacto <= 0) {
+			throw new IllegalStateException("SEGUNDOS_SIN_CONTACTO_SALA debe ser mayor que cero");
+		}
 		this.servicioCuentas = servicioCuentas;
 		this.limitador = limitador;
 		this.generadorCodigos = generadorCodigos;
 		this.reloj = reloj;
+		this.limiteSinContacto = Duration.ofSeconds(segundosSinContacto);
 	}
 
 	public RespuestaSala crear(UUID usuarioId, Integer mapa, Integer jugadores) {
@@ -44,6 +51,7 @@ public class ServicioPartidas {
 		String nombre = servicioCuentas.obtenerCuenta(usuarioId).nombre();
 
 		synchronized (this) {
+			atender(usuarioId);
 			comprobarQueNoEstaEnPartidaComenzada(usuarioId);
 			sacarDeSalaActual(usuarioId);
 			String codigo;
@@ -52,8 +60,7 @@ public class ServicioPartidas {
 			} while (salas.containsKey(codigo));
 
 			Instant ahora = reloj.instant();
-			Sala sala = new Sala(codigo, mapa, jugadores, usuarioId);
-			sala.agregar(new JugadorEnSala(usuarioId, nombre, ahora));
+			Sala sala = new Sala(codigo, mapa, jugadores, new JugadorEnSala(usuarioId, nombre, ahora));
 			salas.put(codigo, sala);
 			salaPorUsuario.put(usuarioId, codigo);
 			return RespuestaSala.de(sala, ahora, TOLERANCIA_CONEXION);
@@ -68,6 +75,7 @@ public class ServicioPartidas {
 		String nombre = servicioCuentas.obtenerCuenta(usuarioId).nombre();
 
 		synchronized (this) {
+			atender(usuarioId);
 			Sala sala = salas.get(CodigoSala.normalizar(codigo));
 			if (sala == null) {
 				limitador.registrarFallo(usuarioId);
@@ -96,6 +104,7 @@ public class ServicioPartidas {
 	}
 
 	public synchronized Optional<RespuestaSala> actual(UUID usuarioId) {
+		atender(usuarioId);
 		String codigo = salaPorUsuario.get(usuarioId);
 		if (codigo == null) {
 			return Optional.empty();
@@ -104,6 +113,7 @@ public class ServicioPartidas {
 	}
 
 	public synchronized RespuestaSala consultar(UUID usuarioId, String codigo) {
+		atender(usuarioId);
 		return consultarComoJugador(salas.get(CodigoSala.normalizar(codigo)), usuarioId);
 	}
 
@@ -111,11 +121,40 @@ public class ServicioPartidas {
 		if (listo == null) {
 			throw new SolicitudInvalidaExcepcion(CodigoError.DATOS_INVALIDOS);
 		}
+		atender(usuarioId);
 		Sala sala = salas.get(CodigoSala.normalizar(codigo));
 		if (sala != null && sala.jugador(usuarioId) != null && !sala.comenzada()) {
 			sala.marcarListo(usuarioId, listo);
 		}
 		return consultarComoJugador(sala, usuarioId);
+	}
+
+	public synchronized void salir(UUID usuarioId, String codigo) {
+		atender(usuarioId);
+		Sala sala = salas.get(CodigoSala.normalizar(codigo));
+		if (sala == null || sala.jugador(usuarioId) == null) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.PARTIDA_NO_ENCONTRADA);
+		}
+		sacarDeSalaActual(usuarioId);
+	}
+
+	private void atender(UUID usuarioId) {
+		expulsarSinContacto();
+		String codigo = salaPorUsuario.get(usuarioId);
+		if (codigo != null) {
+			salas.get(codigo).jugador(usuarioId).registrarSenal(reloj.instant());
+		}
+	}
+
+	private void expulsarSinContacto() {
+		Instant ahora = reloj.instant();
+		List<UUID> ausentes = salas.values().stream()
+				.filter(sala -> !sala.comenzada())
+				.flatMap(sala -> sala.jugadores().stream())
+				.filter(jugador -> !jugador.conectadoEn(ahora, limiteSinContacto))
+				.map(JugadorEnSala::usuarioId)
+				.toList();
+		ausentes.forEach(this::sacarDeSalaActual);
 	}
 
 	private void comprobarQueNoEstaEnPartidaComenzada(UUID usuarioId) {
@@ -142,13 +181,20 @@ public class ServicioPartidas {
 		if (sala == null) {
 			return;
 		}
-		if (!sala.esAnfitrion(usuarioId)) {
-			sala.quitar(usuarioId);
+		if (sala.esAnfitrion(usuarioId) && !sala.comenzada()) {
+			cerrar(sala);
 			return;
 		}
-		salas.remove(codigo);
+		sala.quitar(usuarioId);
+		if (sala.jugadores().isEmpty()) {
+			salas.remove(codigo);
+		}
+	}
+
+	private void cerrar(Sala sala) {
+		salas.remove(sala.codigo());
 		for (JugadorEnSala jugador : sala.jugadores()) {
-			salaPorUsuario.remove(jugador.usuarioId(), codigo);
+			salaPorUsuario.remove(jugador.usuarioId(), sala.codigo());
 		}
 	}
 }
