@@ -13,6 +13,7 @@ public class Sala {
 	private final int capacidad;
 	private final UUID anfitrionId;
 	private final Map<UUID, JugadorEnSala> jugadores = new LinkedHashMap<>();
+	private boolean comenzada;
 
 	public Sala(String codigo, int mapa, int capacidad, UUID anfitrionId) {
 		this.codigo = codigo;
@@ -49,6 +50,15 @@ public class Sala {
 		return new ArrayList<>(jugadores.values());
 	}
 
+	public boolean comenzada() {
+		return comenzada;
+	}
+
+	public void marcarListo(UUID usuarioId, boolean listo) {
+		jugadores.get(usuarioId).marcarListo(listo);
+		comenzarSiTodosListos();
+	}
+
 	public boolean estaLlena() {
 		return jugadores.size() >= capacidad;
 	}
@@ -59,5 +69,12 @@ public class Sala {
 
 	public void quitar(UUID usuarioId) {
 		jugadores.remove(usuarioId);
+		comenzarSiTodosListos();
+	}
+
+	private void comenzarSiTodosListos() {
+		if (jugadores.size() >= 2 && jugadores.values().stream().allMatch(JugadorEnSala::listo)) {
+			comenzada = true;
+		}
 	}
 }

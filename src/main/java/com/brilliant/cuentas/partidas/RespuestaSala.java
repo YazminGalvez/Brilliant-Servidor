@@ -33,10 +33,10 @@ public record RespuestaSala(
 
 	public static RespuestaSala de(Sala sala, Instant ahora, Duration toleranciaConexion) {
 		List<Jugador> jugadores = sala.jugadores().stream()
-				.map(jugador -> new Jugador(jugador.nombre(), false, false,
+				.map(jugador -> new Jugador(jugador.nombre(), jugador.listo(), false,
 						jugador.conectadoEn(ahora, toleranciaConexion), false, false))
 				.toList();
 		return new RespuestaSala(sala.codigo(), sala.mapa(), sala.capacidad(), sala.anfitrion().nombre(), jugadores,
-				false, false, 0, List.of(), List.of(), Map.of(), Map.of(), 0, List.of(), null);
+				sala.comenzada(), false, 0, List.of(), List.of(), Map.of(), Map.of(), 0, List.of(), null);
 	}
 }

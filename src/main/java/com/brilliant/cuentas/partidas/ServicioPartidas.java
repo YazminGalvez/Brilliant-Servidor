@@ -44,6 +44,7 @@ public class ServicioPartidas {
 		String nombre = servicioCuentas.obtenerCuenta(usuarioId).nombre();
 
 		synchronized (this) {
+			comprobarQueNoEstaEnPartidaComenzada(usuarioId);
 			sacarDeSalaActual(usuarioId);
 			String codigo;
 			do {
@@ -78,6 +79,10 @@ public class ServicioPartidas {
 			if (existente != null) {
 				existente.registrarSenal(ahora);
 			} else {
+				comprobarQueNoEstaEnPartidaComenzada(usuarioId);
+				if (sala.comenzada()) {
+					throw new SolicitudInvalidaExcepcion(CodigoError.PARTIDA_COMENZADA);
+				}
 				if (sala.estaLlena()) {
 					throw new SolicitudInvalidaExcepcion(CodigoError.PARTIDA_LLENA);
 				}
@@ -100,6 +105,25 @@ public class ServicioPartidas {
 
 	public synchronized RespuestaSala consultar(UUID usuarioId, String codigo) {
 		return consultarComoJugador(salas.get(CodigoSala.normalizar(codigo)), usuarioId);
+	}
+
+	public synchronized RespuestaSala marcarListo(UUID usuarioId, String codigo, Boolean listo) {
+		if (listo == null) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.DATOS_INVALIDOS);
+		}
+		Sala sala = salas.get(CodigoSala.normalizar(codigo));
+		if (sala != null && sala.jugador(usuarioId) != null && !sala.comenzada()) {
+			sala.marcarListo(usuarioId, listo);
+		}
+		return consultarComoJugador(sala, usuarioId);
+	}
+
+	private void comprobarQueNoEstaEnPartidaComenzada(UUID usuarioId) {
+		String codigo = salaPorUsuario.get(usuarioId);
+		Sala sala = codigo == null ? null : salas.get(codigo);
+		if (sala != null && sala.comenzada()) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.YA_EN_PARTIDA);
+		}
 	}
 
 	private RespuestaSala consultarComoJugador(Sala sala, UUID usuarioId) {

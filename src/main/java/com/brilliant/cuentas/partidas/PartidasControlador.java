@@ -43,6 +43,12 @@ public class PartidasControlador {
 				.orElseGet(() -> ResponseEntity.noContent().build());
 	}
 
+	@PostMapping("/{codigo}/listo")
+	public RespuestaSala marcarListo(@AuthenticationPrincipal UsuarioAutenticado usuario,
+			@PathVariable String codigo, @RequestBody SolicitudListo solicitud) {
+		return servicio.marcarListo(usuario.usuarioId(), codigo, solicitud.listo());
+	}
+
 	@GetMapping("/{codigo}")
 	public RespuestaSala consultar(@AuthenticationPrincipal UsuarioAutenticado usuario,
 			@PathVariable String codigo) {
