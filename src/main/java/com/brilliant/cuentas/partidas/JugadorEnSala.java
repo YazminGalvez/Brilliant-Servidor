@@ -12,6 +12,8 @@ public class JugadorEnSala {
 	private Instant ultimaSenal;
 	private boolean listo;
 	private List<Integer> tablero;
+	private int rondaJugada;
+	private boolean tableroLleno;
 
 	public JugadorEnSala(UUID usuarioId, String nombre, Instant ultimaSenal) {
 		this.usuarioId = usuarioId;
@@ -45,6 +47,23 @@ public class JugadorEnSala {
 
 	public void fijarTablero(List<Integer> numeros) {
 		tablero = List.copyOf(numeros);
+	}
+
+	public boolean tableroLleno() {
+		return tableroLleno;
+	}
+
+	public boolean jugoRonda(int ronda) {
+		return ronda > 0 && rondaJugada == ronda;
+	}
+
+	public boolean terminoRonda(int ronda) {
+		return tableroLleno || jugoRonda(ronda);
+	}
+
+	public void terminarTurno(int ronda, boolean lleno) {
+		rondaJugada = ronda;
+		tableroLleno = tableroLleno || lleno;
 	}
 
 	public void registrarSenal(Instant momento) {

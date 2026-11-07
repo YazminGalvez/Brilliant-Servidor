@@ -13,7 +13,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -56,22 +58,35 @@ class PartidasPrueba {
 	private static final String PATRON_CODIGO = "[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}";
 	private static final List<Integer> TABLERO = List.of(1, 2, 3, 4, 5, 6);
 
+	static class DadosPrueba extends LanzadorDados {
+
+		private final Deque<Integer> preparados = new ArrayDeque<>();
+		private int tiros;
+
+		synchronized void preparar(Integer... valores) {
+			preparados.addAll(List.of(valores));
+		}
+
+		@Override
+		public synchronized int lanzar() {
+			int predeterminado = tiros++ % 2 == 0 ? 3 : 5;
+			Integer preparado = preparados.poll();
+			return preparado != null ? preparado : predeterminado;
+		}
+	}
+
 	@TestConfiguration
-	static class DadosFijos {
+	static class ConfiguracionDadosPrueba {
 
 		@Bean
 		@Primary
-		LanzadorDados lanzadorDadosFijos() {
-			return new LanzadorDados() {
-				private int tiros;
-
-				@Override
-				public int lanzar() {
-					return tiros++ % 2 == 0 ? 3 : 5;
-				}
-			};
+		DadosPrueba dadosPrueba() {
+			return new DadosPrueba();
 		}
 	}
+
+	@Autowired
+	private DadosPrueba dados;
 
 	@TempDir
 	static Path directorioDatos;
@@ -163,6 +178,25 @@ class PartidasPrueba {
 			listo(jugador, codigo, true).andExpect(status().isOk());
 		}
 		consultar(jugadores[0], codigo).andExpect(jsonPath("$.comenzada").value(true));
+		return codigo;
+	}
+
+	private ResultActions turno(String token, String codigo, Integer ronda, Boolean tableroLleno, Integer zona)
+			throws Exception {
+		Map<String, Object> cuerpo = new HashMap<>();
+		cuerpo.put("ronda", ronda);
+		cuerpo.put("tableroLleno", tableroLleno);
+		cuerpo.put("zona", zona);
+		return mockMvc.perform(con(post("/api/v1/partidas/" + codigo + "/turno"), token)
+				.contentType(MediaType.APPLICATION_JSON).content(json(cuerpo)));
+	}
+
+	private String rondaEnCurso(String... jugadores) throws Exception {
+		String codigo = partidaComenzada(jugadores);
+		for (String jugador : jugadores) {
+			tablero(jugador, codigo, TABLERO).andExpect(status().isOk());
+		}
+		consultar(jugadores[0], codigo).andExpect(jsonPath("$.ronda").value(1));
 		return codigo;
 	}
 
@@ -282,6 +316,152 @@ class PartidasPrueba {
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.codigo").value("NO_AUTORIZADO"));
 		tablero("token-falso", "ABCDEF", TABLERO).andExpect(status().isUnauthorized());
+		mockMvc.perform(post("/api/v1/partidas/ABCDEF/turno").contentType(MediaType.APPLICATION_JSON)
+						.content("{\"ronda\":1,\"tableroLleno\":false,\"zona\":null}"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.codigo").value("NO_AUTORIZADO"));
+		turno("token-falso", "ABCDEF", 1, false, null).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void laRondaAvanzaSoloCuandoTodosTerminaron() throws Exception {
+		String ana = jugadorNuevo("ronda-ana");
+		String beto = jugadorNuevo("ronda-beto");
+		String ciro = jugadorNuevo("ronda-ciro");
+		dados.preparar(1, 2, 4, 6);
+		String codigo = rondaEnCurso(ana, beto, ciro);
+
+		turno(ana, codigo, 1, false, null)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.jugadores[*].jugoRonda", contains(true, false, false)))
+				.andExpect(jsonPath("$.ronda").value(1))
+				.andExpect(jsonPath("$.dados", contains(1, 2)));
+		turno(beto, codigo, 1, false, null)
+				.andExpect(jsonPath("$.jugadores[*].jugoRonda", contains(true, true, false)))
+				.andExpect(jsonPath("$.ronda").value(1));
+		turno(ciro, codigo, 1, false, null)
+				.andExpect(jsonPath("$.jugadores[*].jugoRonda", contains(false, false, false)))
+				.andExpect(jsonPath("$.ronda").value(2))
+				.andExpect(jsonPath("$.dados", contains(4, 6)))
+				.andExpect(jsonPath("$.terminada").value(false));
+	}
+
+	@Test
+	void todosVenLosMismosDados() throws Exception {
+		String ana = jugadorNuevo("mismos-ana");
+		String beto = jugadorNuevo("mismos-beto");
+		dados.preparar(6, 1, 2, 5);
+		String codigo = rondaEnCurso(ana, beto);
+		consultar(ana, codigo).andExpect(jsonPath("$.dados", contains(6, 1)));
+		consultar(beto, codigo).andExpect(jsonPath("$.dados", contains(6, 1)));
+
+		turno(ana, codigo, 1, false, null).andExpect(status().isOk());
+		turno(beto, codigo, 1, false, null).andExpect(jsonPath("$.dados", contains(2, 5)));
+
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.ronda").value(2))
+				.andExpect(jsonPath("$.dados", contains(2, 5)));
+	}
+
+	@Test
+	void unAvisoDeOtraRondaSeIgnora() throws Exception {
+		String ana = jugadorNuevo("vieja-ana");
+		String beto = jugadorNuevo("vieja-beto");
+		String codigo = rondaEnCurso(ana, beto);
+		turno(ana, codigo, 1, false, null).andExpect(status().isOk());
+		turno(beto, codigo, 1, false, null).andExpect(jsonPath("$.ronda").value(2));
+
+		turno(ana, codigo, 1, true, 3)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ronda").value(2))
+				.andExpect(jsonPath("$.jugadores[0].jugoRonda").value(false))
+				.andExpect(jsonPath("$.zonas").isEmpty());
+		turno(ana, codigo, 7, false, 4)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.jugadores[0].jugoRonda").value(false))
+				.andExpect(jsonPath("$.zonas").isEmpty());
+
+		turno(ana, codigo, 2, false, null).andExpect(jsonPath("$.jugadores[0].jugoRonda").value(true));
+	}
+
+	@Test
+	void unaZonaSeRegistraUnaVezYSoloUnaPorRonda() throws Exception {
+		String ana = jugadorNuevo("zona-ana");
+		String beto = jugadorNuevo("zona-beto");
+		String codigo = rondaEnCurso(ana, beto);
+
+		turno(ana, codigo, 1, false, 3).andExpect(jsonPath("$.zonas['3']['zona-ana']").value(1));
+		turno(ana, codigo, 1, false, 4)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.zonas['4']").doesNotExist());
+		turno(beto, codigo, 1, false, 3)
+				.andExpect(jsonPath("$.zonas['3']['zona-ana']").value(1))
+				.andExpect(jsonPath("$.zonas['3']['zona-beto']").value(1))
+				.andExpect(jsonPath("$.ronda").value(2));
+
+		turno(ana, codigo, 2, false, 3).andExpect(jsonPath("$.zonas['3']['zona-ana']").value(1));
+		turno(beto, codigo, 2, false, 5)
+				.andExpect(jsonPath("$.zonas['5']['zona-beto']").value(2))
+				.andExpect(jsonPath("$.zonas['5']['zona-ana']").doesNotExist());
+		consultar(ana, codigo).andExpect(jsonPath("$.zonas['3']['zona-beto']").value(1));
+	}
+
+	@Test
+	void laPartidaTerminaCuandoTodosLlenaronSuTablero() throws Exception {
+		String ana = jugadorNuevo("lleno-ana");
+		String beto = jugadorNuevo("lleno-beto");
+		String codigo = rondaEnCurso(ana, beto);
+
+		turno(ana, codigo, 1, true, null).andExpect(jsonPath("$.ronda").value(1));
+		turno(beto, codigo, 1, false, null)
+				.andExpect(jsonPath("$.ronda").value(2))
+				.andExpect(jsonPath("$.terminada").value(false));
+
+		turno(beto, codigo, 2, false, null)
+				.andExpect(jsonPath("$.ronda").value(3))
+				.andExpect(jsonPath("$.terminada").value(false));
+
+		turno(beto, codigo, 3, true, null)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.terminada").value(true))
+				.andExpect(jsonPath("$.motivoFin").value("sin_tableros"))
+				.andExpect(jsonPath("$.ronda").value(3))
+				.andExpect(jsonPath("$.puntos").isEmpty())
+				.andExpect(jsonPath("$.meta").value(0))
+				.andExpect(jsonPath("$.ganadores", hasSize(0)));
+
+		turno(ana, codigo, 3, false, 2).andExpect(jsonPath("$.zonas").isEmpty());
+		crear(ana, 1, 2).andExpect(status().isCreated());
+	}
+
+	@Test
+	void turnoConDatosInvalidosResponde400() throws Exception {
+		String ana = jugadorNuevo("turno-ana");
+		String beto = jugadorNuevo("turno-beto");
+		String codigo = rondaEnCurso(ana, beto);
+
+		for (Map<String, Object> cuerpo : List.of(
+				Map.<String, Object>of("tableroLleno", false),
+				Map.<String, Object>of("ronda", 1),
+				Map.<String, Object>of("ronda", 1, "tableroLleno", false, "zona", 0),
+				Map.<String, Object>of("ronda", 1, "tableroLleno", false, "zona", 50))) {
+			mockMvc.perform(con(post("/api/v1/partidas/" + codigo + "/turno"), ana)
+							.contentType(MediaType.APPLICATION_JSON).content(json(cuerpo)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		}
+		consultar(ana, codigo).andExpect(jsonPath("$.jugadores[0].jugoRonda").value(false));
+	}
+
+	@Test
+	void turnoAntesDeComenzarOAjenoResponde409O404() throws Exception {
+		String ana = jugadorNuevo("espera-ana");
+		String codigo = codigoNuevo(ana, 2);
+
+		turno(ana, codigo, 1, false, null)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("PARTIDA_NO_COMENZADA"));
+		esperarNoEncontrada(turno(jugadorNuevo("espera-beto"), codigo, 1, false, null));
 	}
 
 	@Test

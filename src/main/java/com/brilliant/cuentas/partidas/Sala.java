@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 public class Sala {
@@ -17,6 +18,9 @@ public class Sala {
 	private boolean comenzada;
 	private int ronda;
 	private List<Integer> dados = List.of();
+	private final Map<Integer, Map<String, Integer>> zonas = new TreeMap<>();
+	private boolean terminada;
+	private String motivoFin;
 
 	public Sala(String codigo, int mapa, int capacidad, JugadorEnSala anfitrion) {
 		this.codigo = codigo;
@@ -74,6 +78,42 @@ public class Sala {
 	public void comenzarRonda(int primerDado, int segundoDado) {
 		ronda++;
 		dados = List.of(primerDado, segundoDado);
+	}
+
+	public boolean terminada() {
+		return terminada;
+	}
+
+	public String motivoFin() {
+		return motivoFin;
+	}
+
+	public void terminar(String motivo) {
+		terminada = true;
+		motivoFin = motivo;
+	}
+
+	public Map<Integer, Map<String, Integer>> zonas() {
+		return zonas;
+	}
+
+	public void registrarTurno(UUID usuarioId, int rondaAvisada, boolean tableroLleno, Integer zona) {
+		JugadorEnSala jugador = jugadores.get(usuarioId);
+		if (!comenzada || terminada || ronda == 0 || rondaAvisada != ronda || jugador.terminoRonda(ronda)) {
+			return;
+		}
+		jugador.terminarTurno(ronda, tableroLleno);
+		if (zona != null) {
+			zonas.computeIfAbsent(zona, clave -> new LinkedHashMap<>()).putIfAbsent(jugador.nombre(), ronda);
+		}
+	}
+
+	public boolean todosTerminaronLaRonda() {
+		return ronda > 0 && jugadores.values().stream().allMatch(jugador -> jugador.terminoRonda(ronda));
+	}
+
+	public boolean todosLlenaronSuTablero() {
+		return jugadores.values().stream().allMatch(JugadorEnSala::tableroLleno);
 	}
 
 	public void marcarListo(UUID usuarioId, boolean listo) {

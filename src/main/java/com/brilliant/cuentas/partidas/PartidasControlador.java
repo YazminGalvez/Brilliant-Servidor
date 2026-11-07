@@ -55,6 +55,13 @@ public class PartidasControlador {
 		return servicio.enviarTablero(usuario.usuarioId(), codigo, solicitud.numeros());
 	}
 
+	@PostMapping("/{codigo}/turno")
+	public RespuestaSala terminarTurno(@AuthenticationPrincipal UsuarioAutenticado usuario,
+			@PathVariable String codigo, @RequestBody SolicitudTurno solicitud) {
+		return servicio.terminarTurno(usuario.usuarioId(), codigo, solicitud.ronda(), solicitud.tableroLleno(),
+				solicitud.zona());
+	}
+
 	@PostMapping("/{codigo}/salir")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void salir(@AuthenticationPrincipal UsuarioAutenticado usuario, @PathVariable String codigo) {

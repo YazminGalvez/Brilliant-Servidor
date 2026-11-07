@@ -26,6 +26,9 @@ public class ServicioPartidas {
 
 	public static final Duration TOLERANCIA_CONEXION = Duration.ofSeconds(15);
 	private static final Set<Integer> NUMEROS_TABLERO = Set.of(1, 2, 3, 4, 5, 6);
+	// El tablero es de 7x7: no puede haber más zonas que celdas.
+	private static final int ZONA_MAXIMA = 49;
+	private static final String FIN_SIN_TABLEROS = "sin_tableros";
 
 	private final Map<String, Sala> salas = new HashMap<>();
 	private final Map<UUID, String> salaPorUsuario = new HashMap<>();
@@ -147,8 +150,23 @@ public class ServicioPartidas {
 		JugadorEnSala jugador = sala.jugador(usuarioId);
 		if (!jugador.tableroListo()) {
 			jugador.fijarTablero(numeros);
-			lanzarPrimeraRondaSiTodosTienenTablero(sala);
+			avanzarSiCorresponde(sala);
 		}
+		return consultarComoJugador(sala, usuarioId);
+	}
+
+	public synchronized RespuestaSala terminarTurno(UUID usuarioId, String codigo, Integer ronda,
+			Boolean tableroLleno, Integer zona) {
+		atender(usuarioId);
+		Sala sala = salaDeJugador(usuarioId, codigo);
+		if (ronda == null || tableroLleno == null || (zona != null && (zona < 1 || zona > ZONA_MAXIMA))) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.DATOS_INVALIDOS);
+		}
+		if (!sala.comenzada()) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.PARTIDA_NO_COMENZADA);
+		}
+		sala.registrarTurno(usuarioId, ronda, tableroLleno, zona);
+		avanzarSiCorresponde(sala);
 		return consultarComoJugador(sala, usuarioId);
 	}
 
@@ -166,8 +184,22 @@ public class ServicioPartidas {
 		return sala;
 	}
 
-	private void lanzarPrimeraRondaSiTodosTienenTablero(Sala sala) {
-		if (sala.comenzada() && sala.ronda() == 0 && !sala.jugadores().isEmpty() && sala.todosTienenTablero()) {
+	private void avanzarSiCorresponde(Sala sala) {
+		if (!sala.comenzada() || sala.terminada() || sala.jugadores().isEmpty()) {
+			return;
+		}
+		if (sala.ronda() == 0) {
+			if (sala.todosTienenTablero()) {
+				sala.comenzarRonda(dados.lanzar(), dados.lanzar());
+			}
+			return;
+		}
+		if (!sala.todosTerminaronLaRonda()) {
+			return;
+		}
+		if (sala.todosLlenaronSuTablero()) {
+			sala.terminar(FIN_SIN_TABLEROS);
+		} else {
 			sala.comenzarRonda(dados.lanzar(), dados.lanzar());
 		}
 	}
@@ -194,7 +226,7 @@ public class ServicioPartidas {
 	private void comprobarQueNoEstaEnPartidaComenzada(UUID usuarioId) {
 		String codigo = salaPorUsuario.get(usuarioId);
 		Sala sala = codigo == null ? null : salas.get(codigo);
-		if (sala != null && sala.comenzada()) {
+		if (sala != null && sala.comenzada() && !sala.terminada()) {
 			throw new SolicitudInvalidaExcepcion(CodigoError.YA_EN_PARTIDA);
 		}
 	}
@@ -223,7 +255,7 @@ public class ServicioPartidas {
 		if (sala.jugadores().isEmpty()) {
 			salas.remove(codigo);
 		} else {
-			lanzarPrimeraRondaSiTodosTienenTablero(sala);
+			avanzarSiCorresponde(sala);
 		}
 	}
 
