@@ -2,6 +2,7 @@ package com.brilliant.cuentas.partidas;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public class JugadorEnSala {
@@ -10,6 +11,7 @@ public class JugadorEnSala {
 	private final String nombre;
 	private Instant ultimaSenal;
 	private boolean listo;
+	private List<Integer> tablero;
 
 	public JugadorEnSala(UUID usuarioId, String nombre, Instant ultimaSenal) {
 		this.usuarioId = usuarioId;
@@ -31,6 +33,18 @@ public class JugadorEnSala {
 
 	public void marcarListo(boolean listo) {
 		this.listo = listo;
+	}
+
+	public List<Integer> tablero() {
+		return tablero == null ? List.of() : tablero;
+	}
+
+	public boolean tableroListo() {
+		return tablero != null;
+	}
+
+	public void fijarTablero(List<Integer> numeros) {
+		tablero = List.copyOf(numeros);
 	}
 
 	public void registrarSenal(Instant momento) {

@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public record RespuestaSala(
 		String codigo,
@@ -31,12 +32,15 @@ public record RespuestaSala(
 			boolean jugoRonda) {
 	}
 
-	public static RespuestaSala de(Sala sala, Instant ahora, Duration toleranciaConexion) {
+	public static RespuestaSala de(Sala sala, UUID usuarioId, Instant ahora, Duration toleranciaConexion) {
 		List<Jugador> jugadores = sala.jugadores().stream()
-				.map(jugador -> new Jugador(jugador.nombre(), jugador.listo(), false,
+				.map(jugador -> new Jugador(jugador.nombre(), jugador.listo(), jugador.tableroListo(),
 						jugador.conectadoEn(ahora, toleranciaConexion), false, false))
 				.toList();
+		JugadorEnSala propio = sala.jugador(usuarioId);
+		List<Integer> miTablero = propio == null ? List.of() : propio.tablero();
 		return new RespuestaSala(sala.codigo(), sala.mapa(), sala.capacidad(), sala.nombreAnfitrion(), jugadores,
-				sala.comenzada(), false, 0, List.of(), List.of(), Map.of(), Map.of(), 0, List.of(), null);
+				sala.comenzada(), false, sala.ronda(), sala.dados(), miTablero, Map.of(), Map.of(), 0, List.of(),
+				null);
 	}
 }

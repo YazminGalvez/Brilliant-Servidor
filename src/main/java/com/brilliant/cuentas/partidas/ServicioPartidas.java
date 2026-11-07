@@ -4,9 +4,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -23,23 +25,26 @@ import com.brilliant.cuentas.errores.SolicitudInvalidaExcepcion;
 public class ServicioPartidas {
 
 	public static final Duration TOLERANCIA_CONEXION = Duration.ofSeconds(15);
+	private static final Set<Integer> NUMEROS_TABLERO = Set.of(1, 2, 3, 4, 5, 6);
 
 	private final Map<String, Sala> salas = new HashMap<>();
 	private final Map<UUID, String> salaPorUsuario = new HashMap<>();
 	private final ServicioCuentas servicioCuentas;
 	private final LimitadorCodigos limitador;
 	private final CodigoSala generadorCodigos;
+	private final LanzadorDados dados;
 	private final Clock reloj;
 	private final Duration limiteSinContacto;
 
 	public ServicioPartidas(ServicioCuentas servicioCuentas, LimitadorCodigos limitador, CodigoSala generadorCodigos,
-			Clock reloj, @Value("${cuentas.room-idle-seconds}") long segundosSinContacto) {
+			LanzadorDados dados, Clock reloj, @Value("${cuentas.room-idle-seconds}") long segundosSinContacto) {
 		if (segundosSinContacto <= 0) {
 			throw new IllegalStateException("SEGUNDOS_SIN_CONTACTO_SALA debe ser mayor que cero");
 		}
 		this.servicioCuentas = servicioCuentas;
 		this.limitador = limitador;
 		this.generadorCodigos = generadorCodigos;
+		this.dados = dados;
 		this.reloj = reloj;
 		this.limiteSinContacto = Duration.ofSeconds(segundosSinContacto);
 	}
@@ -63,7 +68,7 @@ public class ServicioPartidas {
 			Sala sala = new Sala(codigo, mapa, jugadores, new JugadorEnSala(usuarioId, nombre, ahora));
 			salas.put(codigo, sala);
 			salaPorUsuario.put(usuarioId, codigo);
-			return RespuestaSala.de(sala, ahora, TOLERANCIA_CONEXION);
+			return RespuestaSala.de(sala, usuarioId, ahora, TOLERANCIA_CONEXION);
 		}
 	}
 
@@ -99,7 +104,7 @@ public class ServicioPartidas {
 				salaPorUsuario.put(usuarioId, sala.codigo());
 			}
 			limitador.reiniciar(usuarioId);
-			return RespuestaSala.de(sala, ahora, TOLERANCIA_CONEXION);
+			return RespuestaSala.de(sala, usuarioId, ahora, TOLERANCIA_CONEXION);
 		}
 	}
 
@@ -129,13 +134,42 @@ public class ServicioPartidas {
 		return consultarComoJugador(sala, usuarioId);
 	}
 
+	public synchronized RespuestaSala enviarTablero(UUID usuarioId, String codigo, List<Integer> numeros) {
+		atender(usuarioId);
+		Sala sala = salaDeJugador(usuarioId, codigo);
+		if (numeros == null || numeros.size() != NUMEROS_TABLERO.size()
+				|| !new HashSet<>(numeros).equals(NUMEROS_TABLERO)) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.DATOS_INVALIDOS);
+		}
+		if (!sala.comenzada()) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.PARTIDA_NO_COMENZADA);
+		}
+		JugadorEnSala jugador = sala.jugador(usuarioId);
+		if (!jugador.tableroListo()) {
+			jugador.fijarTablero(numeros);
+			lanzarPrimeraRondaSiTodosTienenTablero(sala);
+		}
+		return consultarComoJugador(sala, usuarioId);
+	}
+
 	public synchronized void salir(UUID usuarioId, String codigo) {
 		atender(usuarioId);
+		salaDeJugador(usuarioId, codigo);
+		sacarDeSalaActual(usuarioId);
+	}
+
+	private Sala salaDeJugador(UUID usuarioId, String codigo) {
 		Sala sala = salas.get(CodigoSala.normalizar(codigo));
 		if (sala == null || sala.jugador(usuarioId) == null) {
 			throw new SolicitudInvalidaExcepcion(CodigoError.PARTIDA_NO_ENCONTRADA);
 		}
-		sacarDeSalaActual(usuarioId);
+		return sala;
+	}
+
+	private void lanzarPrimeraRondaSiTodosTienenTablero(Sala sala) {
+		if (sala.comenzada() && sala.ronda() == 0 && !sala.jugadores().isEmpty() && sala.todosTienenTablero()) {
+			sala.comenzarRonda(dados.lanzar(), dados.lanzar());
+		}
 	}
 
 	private void atender(UUID usuarioId) {
@@ -172,7 +206,7 @@ public class ServicioPartidas {
 		}
 		Instant ahora = reloj.instant();
 		jugador.registrarSenal(ahora);
-		return RespuestaSala.de(sala, ahora, TOLERANCIA_CONEXION);
+		return RespuestaSala.de(sala, usuarioId, ahora, TOLERANCIA_CONEXION);
 	}
 
 	private void sacarDeSalaActual(UUID usuarioId) {
@@ -188,6 +222,8 @@ public class ServicioPartidas {
 		sala.quitar(usuarioId);
 		if (sala.jugadores().isEmpty()) {
 			salas.remove(codigo);
+		} else {
+			lanzarPrimeraRondaSiTodosTienenTablero(sala);
 		}
 	}
 

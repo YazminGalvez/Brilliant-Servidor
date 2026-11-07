@@ -15,6 +15,8 @@ public class Sala {
 	private final String nombreAnfitrion;
 	private final Map<UUID, JugadorEnSala> jugadores = new LinkedHashMap<>();
 	private boolean comenzada;
+	private int ronda;
+	private List<Integer> dados = List.of();
 
 	public Sala(String codigo, int mapa, int capacidad, JugadorEnSala anfitrion) {
 		this.codigo = codigo;
@@ -55,6 +57,23 @@ public class Sala {
 
 	public boolean comenzada() {
 		return comenzada;
+	}
+
+	public int ronda() {
+		return ronda;
+	}
+
+	public List<Integer> dados() {
+		return dados;
+	}
+
+	public boolean todosTienenTablero() {
+		return jugadores.values().stream().allMatch(JugadorEnSala::tableroListo);
+	}
+
+	public void comenzarRonda(int primerDado, int segundoDado) {
+		ronda++;
+		dados = List.of(primerDado, segundoDado);
 	}
 
 	public void marcarListo(UUID usuarioId, boolean listo) {

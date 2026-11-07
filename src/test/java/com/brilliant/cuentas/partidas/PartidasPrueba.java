@@ -13,7 +13,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -26,7 +28,10 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
@@ -49,6 +54,24 @@ class PartidasPrueba {
 
 	private static final String CONTRASENA = "Clave-segura-91";
 	private static final String PATRON_CODIGO = "[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}";
+	private static final List<Integer> TABLERO = List.of(1, 2, 3, 4, 5, 6);
+
+	@TestConfiguration
+	static class DadosFijos {
+
+		@Bean
+		@Primary
+		LanzadorDados lanzadorDadosFijos() {
+			return new LanzadorDados() {
+				private int tiros;
+
+				@Override
+				public int lanzar() {
+					return tiros++ % 2 == 0 ? 3 : 5;
+				}
+			};
+		}
+	}
 
 	@TempDir
 	static Path directorioDatos;
@@ -124,11 +147,22 @@ class PartidasPrueba {
 		return mockMvc.perform(con(post("/api/v1/partidas/" + codigo + "/salir"), token));
 	}
 
-	private String partidaComenzada(String anfitrion, String invitado) throws Exception {
-		String codigo = codigoNuevo(anfitrion, 2);
-		unirse(invitado, codigo).andExpect(status().isOk());
-		listo(anfitrion, codigo, true).andExpect(status().isOk());
-		listo(invitado, codigo, true).andExpect(jsonPath("$.comenzada").value(true));
+	private ResultActions tablero(String token, String codigo, List<Integer> numeros) throws Exception {
+		Map<String, List<Integer>> cuerpo = new HashMap<>();
+		cuerpo.put("numeros", numeros);
+		return mockMvc.perform(con(post("/api/v1/partidas/" + codigo + "/tablero"), token)
+				.contentType(MediaType.APPLICATION_JSON).content(json(cuerpo)));
+	}
+
+	private String partidaComenzada(String... jugadores) throws Exception {
+		String codigo = codigoNuevo(jugadores[0], jugadores.length);
+		for (int i = 1; i < jugadores.length; i++) {
+			unirse(jugadores[i], codigo).andExpect(status().isOk());
+		}
+		for (String jugador : jugadores) {
+			listo(jugador, codigo, true).andExpect(status().isOk());
+		}
+		consultar(jugadores[0], codigo).andExpect(jsonPath("$.comenzada").value(true));
 		return codigo;
 	}
 
@@ -243,6 +277,134 @@ class PartidasPrueba {
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.codigo").value("NO_AUTORIZADO"));
 		salir("token-falso", "ABCDEF").andExpect(status().isUnauthorized());
+		mockMvc.perform(post("/api/v1/partidas/ABCDEF/tablero").contentType(MediaType.APPLICATION_JSON)
+						.content("{\"numeros\":[1,2,3,4,5,6]}"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.codigo").value("NO_AUTORIZADO"));
+		tablero("token-falso", "ABCDEF", TABLERO).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void losDadosSeLanzanSoloCuandoTodosEnviaronSuTablero() throws Exception {
+		String ana = jugadorNuevo("dados-ana");
+		String beto = jugadorNuevo("dados-beto");
+		String ciro = jugadorNuevo("dados-ciro");
+		String codigo = partidaComenzada(ana, beto, ciro);
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.ronda").value(0))
+				.andExpect(jsonPath("$.dados", hasSize(0)));
+
+		tablero(ana, codigo, TABLERO)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.jugadores[*].tableroListo", contains(true, false, false)))
+				.andExpect(jsonPath("$.ronda").value(0))
+				.andExpect(jsonPath("$.dados", hasSize(0)));
+		tablero(beto, codigo, List.of(6, 5, 4, 3, 2, 1))
+				.andExpect(jsonPath("$.jugadores[*].tableroListo", contains(true, true, false)))
+				.andExpect(jsonPath("$.ronda").value(0))
+				.andExpect(jsonPath("$.dados", hasSize(0)));
+		tablero(ciro, codigo, List.of(2, 4, 6, 1, 3, 5))
+				.andExpect(jsonPath("$.jugadores[*].tableroListo", contains(true, true, true)))
+				.andExpect(jsonPath("$.ronda").value(1))
+				.andExpect(jsonPath("$.dados", contains(3, 5)));
+
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.ronda").value(1))
+				.andExpect(jsonPath("$.dados", contains(3, 5)));
+	}
+
+	@Test
+	void siSaleQuienNoEnvioSuTableroSeLanzanLosDados() throws Exception {
+		String ana = jugadorNuevo("pendiente-ana");
+		String beto = jugadorNuevo("pendiente-beto");
+		String ciro = jugadorNuevo("pendiente-ciro");
+		String codigo = partidaComenzada(ana, beto, ciro);
+		tablero(ana, codigo, TABLERO).andExpect(status().isOk());
+		tablero(beto, codigo, TABLERO).andExpect(jsonPath("$.ronda").value(0));
+
+		salir(ciro, codigo).andExpect(status().isNoContent());
+
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.ronda").value(1))
+				.andExpect(jsonPath("$.dados", contains(3, 5)));
+	}
+
+	static Stream<List<Integer>> tablerosInvalidos() {
+		return Stream.of(
+				List.of(), List.of(1, 2, 3, 4, 5), List.of(1, 2, 3, 4, 5, 6, 1), List.of(1, 1, 2, 3, 4, 5),
+				List.of(0, 1, 2, 3, 4, 5), List.of(2, 3, 4, 5, 6, 7), Arrays.asList(1, 2, 3, 4, 5, null), null);
+	}
+
+	@ParameterizedTest
+	@MethodSource("tablerosInvalidos")
+	void tableroInvalidoResponde400(List<Integer> numeros) throws Exception {
+		String ana = jugadorNuevo("invalido-" + Math.abs(String.valueOf(numeros).hashCode()) + "-a");
+		String beto = jugadorNuevo("invalido-" + Math.abs(String.valueOf(numeros).hashCode()) + "-b");
+		String codigo = partidaComenzada(ana, beto);
+
+		tablero(ana, codigo, numeros)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.jugadores[0].tableroListo").value(false))
+				.andExpect(jsonPath("$.miTablero", hasSize(0)));
+	}
+
+	@Test
+	void tableroAntesDeComenzarResponde409() throws Exception {
+		String ana = jugadorNuevo("temprano-ana");
+		String codigo = codigoNuevo(ana, 2);
+		unirse(jugadorNuevo("temprano-beto"), codigo).andExpect(status().isOk());
+
+		tablero(ana, codigo, TABLERO)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("PARTIDA_NO_COMENZADA"));
+		consultar(ana, codigo).andExpect(jsonPath("$.jugadores[0].tableroListo").value(false));
+	}
+
+	@Test
+	void reenviarElTableroNoCambiaNada() throws Exception {
+		String ana = jugadorNuevo("reintento-ana");
+		String beto = jugadorNuevo("reintento-beto");
+		String codigo = partidaComenzada(ana, beto);
+		tablero(ana, codigo, TABLERO).andExpect(status().isOk());
+
+		tablero(ana, codigo, List.of(6, 5, 4, 3, 2, 1))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.miTablero", contains(1, 2, 3, 4, 5, 6)));
+
+		tablero(beto, codigo, TABLERO).andExpect(jsonPath("$.ronda").value(1));
+		tablero(beto, codigo, List.of(6, 5, 4, 3, 2, 1))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ronda").value(1))
+				.andExpect(jsonPath("$.dados", contains(3, 5)))
+				.andExpect(jsonPath("$.miTablero", contains(1, 2, 3, 4, 5, 6)));
+	}
+
+	@Test
+	void miTableroNoRevelaElDeOtros() throws Exception {
+		String ana = jugadorNuevo("secreto-ana");
+		String beto = jugadorNuevo("secreto-beto");
+		String codigo = partidaComenzada(ana, beto);
+
+		tablero(ana, codigo, List.of(4, 2, 6, 1, 5, 3)).andExpect(jsonPath("$.miTablero", contains(4, 2, 6, 1, 5, 3)));
+		consultar(beto, codigo)
+				.andExpect(jsonPath("$.jugadores[0].tableroListo").value(true))
+				.andExpect(jsonPath("$.miTablero", hasSize(0)));
+
+		tablero(beto, codigo, List.of(3, 1, 2, 6, 4, 5)).andExpect(jsonPath("$.miTablero", contains(3, 1, 2, 6, 4, 5)));
+		consultar(ana, codigo).andExpect(jsonPath("$.miTablero", contains(4, 2, 6, 1, 5, 3)));
+		unirse(beto, codigo).andExpect(jsonPath("$.miTablero", contains(3, 1, 2, 6, 4, 5)));
+	}
+
+	@Test
+	void tableroDeQuienNoEsJugadorResponde404() throws Exception {
+		String ana = jugadorNuevo("intruso-ana");
+		String beto = jugadorNuevo("intruso-beto");
+		String codigo = partidaComenzada(ana, beto);
+
+		esperarNoEncontrada(tablero(jugadorNuevo("intruso-ciro"), codigo, TABLERO));
+		esperarNoEncontrada(tablero(ana, "ZZZZZZ", TABLERO));
 	}
 
 	@Test

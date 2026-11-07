@@ -21,6 +21,7 @@ public enum CodigoError {
 	PARTIDA_LLENA(HttpStatus.CONFLICT, "La partida ya está llena."),
 	PARTIDA_COMENZADA(HttpStatus.CONFLICT, "La partida ya comenzó."),
 	YA_EN_PARTIDA(HttpStatus.CONFLICT, "Ya estás en una partida en curso."),
+	PARTIDA_NO_COMENZADA(HttpStatus.CONFLICT, "La partida aún no comienza."),
 	DEMASIADOS_INTENTOS(HttpStatus.TOO_MANY_REQUESTS,
 			"Demasiados intentos fallidos. Espera un momento antes de volver a intentarlo."),
 	RECURSO_NO_ENCONTRADO(HttpStatus.NOT_FOUND, "El recurso no existe."),

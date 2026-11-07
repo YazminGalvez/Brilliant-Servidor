@@ -11,6 +11,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 
@@ -46,10 +47,15 @@ class ServicioPartidasPrueba {
 		};
 	}
 
+	private ServicioPartidas servicio(CodigoSala generador, long segundosSinContacto) {
+		return new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10), generador,
+				new LanzadorDados(new Random(7)), reloj, segundosSinContacto);
+	}
+
 	@Test
 	void noRepiteCodigosDeSalasVivas() {
-		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
-				generadorRepetido("AAAAAA", "AAAAAA", "BBBBBB", "AAAAAA", "BBBBBB", "CCCCCC"), reloj, 120);
+		ServicioPartidas servicio = servicio(
+				generadorRepetido("AAAAAA", "AAAAAA", "BBBBBB", "AAAAAA", "BBBBBB", "CCCCCC"), 120);
 
 		String primero = servicio.crear(UUID.randomUUID(), 1, 2).codigo();
 		String segundo = servicio.crear(UUID.randomUUID(), 1, 2).codigo();
@@ -60,8 +66,7 @@ class ServicioPartidasPrueba {
 
 	@Test
 	void muchasSalasTienenCodigosDistintos() {
-		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
-				new CodigoSala(), reloj, 120);
+		ServicioPartidas servicio = servicio(new CodigoSala(), 120);
 		Set<String> codigos = new HashSet<>();
 
 		for (int i = 0; i < 500; i++) {
@@ -75,20 +80,32 @@ class ServicioPartidasPrueba {
 
 	@Test
 	void rechazaSegundosSinContactoNoPositivos() {
-		assertThatThrownBy(() -> new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
-				new CodigoSala(), reloj, 0))
+		assertThatThrownBy(() -> servicio(new CodigoSala(), 0))
 				.isInstanceOf(IllegalStateException.class)
 				.hasMessageContaining("SEGUNDOS_SIN_CONTACTO_SALA");
 	}
 
 	@Test
 	void codigoCerradoSePuedeReutilizar() {
-		ServicioPartidas servicio = new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10),
-				generadorRepetido("AAAAAA", "BBBBBB"), reloj, 120);
+		ServicioPartidas servicio = servicio(generadorRepetido("AAAAAA", "BBBBBB"), 120);
 		UUID anfitrion = UUID.randomUUID();
 
 		assertThat(servicio.crear(anfitrion, 1, 2).codigo()).isEqualTo("AAAAAA");
 		assertThat(servicio.crear(anfitrion, 1, 2).codigo()).isEqualTo("BBBBBB");
 		assertThat(servicio.crear(UUID.randomUUID(), 1, 2).codigo()).isEqualTo("AAAAAA");
+	}
+
+	@Test
+	void losDadosSiempreQuedanEntreUnoYSeis() {
+		LanzadorDados lanzador = new LanzadorDados();
+		Set<Integer> vistos = new HashSet<>();
+
+		for (int i = 0; i < 2000; i++) {
+			int dado = lanzador.lanzar();
+			assertThat(dado).isBetween(1, 6);
+			vistos.add(dado);
+		}
+
+		assertThat(vistos).containsExactlyInAnyOrder(1, 2, 3, 4, 5, 6);
 	}
 }
