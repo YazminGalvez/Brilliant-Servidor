@@ -276,8 +276,88 @@ class PartidasPrueba {
 				.andExpect(jsonPath("$.puntos['puntos-ana']").value(8 + 4))
 				.andExpect(jsonPath("$.puntos['puntos-beto']").value(8))
 				.andExpect(jsonPath("$.puntos['puntos-ciro']").value(6))
-				.andExpect(jsonPath("$.meta").value(0))
+				.andExpect(jsonPath("$.terminada").value(false))
 				.andExpect(jsonPath("$.ganadores", hasSize(0)));
+	}
+
+	@Test
+	void laMetaDependeDeCuantosEmpezaron() throws Exception {
+		String ana = jugadorNuevo("meta-ana");
+		String beto = jugadorNuevo("meta-beto");
+		String codigo = codigoNuevo(ana, 3);
+		unirse(beto, codigo).andExpect(jsonPath("$.meta").value(0));
+		listo(ana, codigo, true).andExpect(jsonPath("$.meta").value(0));
+		listo(beto, codigo, true)
+				.andExpect(jsonPath("$.comenzada").value(true))
+				.andExpect(jsonPath("$.meta").value(26));
+
+		String ciro = jugadorNuevo("meta-ciro");
+		String dora = jugadorNuevo("meta-dora");
+		String eli = jugadorNuevo("meta-eli");
+		String trio = partidaComenzada(ciro, dora, eli);
+		consultar(ciro, trio).andExpect(jsonPath("$.meta").value(24));
+	}
+
+	@Test
+	void laMetaNoCambiaSiAlguienSale() throws Exception {
+		String ana = jugadorNuevo("fija-ana");
+		String beto = jugadorNuevo("fija-beto");
+		String ciro = jugadorNuevo("fija-ciro");
+		String codigo = partidaComenzada(ana, beto, ciro);
+		consultar(ana, codigo).andExpect(jsonPath("$.meta").value(24));
+
+		salir(ciro, codigo).andExpect(status().isNoContent());
+
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.jugadores", hasSize(2)))
+				.andExpect(jsonPath("$.meta").value(24));
+	}
+
+	@Test
+	void laPartidaTerminaPorMetaAlCerrarLaRondaNoAMitad() throws Exception {
+		String ana = jugadorNuevo("gana-ana");
+		String beto = jugadorNuevo("gana-beto");
+		String codigo = rondaEnCurso(ana, beto);
+
+		int ronda = 1;
+		for (int zona : new int[] {1, 3, 9}) {
+			turno(ana, codigo, ronda, false, zona).andExpect(status().isOk());
+			turno(beto, codigo, ronda, false, null).andExpect(jsonPath("$.terminada").value(false));
+			ronda++;
+		}
+		turno(ana, codigo, 4, false, 4)
+				.andExpect(jsonPath("$.puntos['gana-ana']").value(8 + 7 + 7 + 6))
+				.andExpect(jsonPath("$.terminada").value(false))
+				.andExpect(jsonPath("$.ganadores", hasSize(0)))
+				.andExpect(jsonPath("$.motivoFin").doesNotExist());
+
+		turno(beto, codigo, 4, false, null)
+				.andExpect(jsonPath("$.terminada").value(true))
+				.andExpect(jsonPath("$.motivoFin").value("meta"))
+				.andExpect(jsonPath("$.ganadores", contains("gana-ana")))
+				.andExpect(jsonPath("$.ronda").value(4));
+		consultar(beto, codigo).andExpect(jsonPath("$.ganadores", contains("gana-ana")));
+	}
+
+	@Test
+	void unEmpateEnPuntosDaVariosGanadores() throws Exception {
+		String ana = jugadorNuevo("empate-ana");
+		String beto = jugadorNuevo("empate-beto");
+		String codigo = rondaEnCurso(ana, beto);
+
+		int ronda = 1;
+		for (int zona : new int[] {1, 3, 9, 4}) {
+			turno(ana, codigo, ronda, false, zona).andExpect(status().isOk());
+			turno(beto, codigo, ronda, false, zona).andExpect(status().isOk());
+			ronda++;
+		}
+
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.terminada").value(true))
+				.andExpect(jsonPath("$.motivoFin").value("meta"))
+				.andExpect(jsonPath("$.puntos['empate-ana']").value(28))
+				.andExpect(jsonPath("$.puntos['empate-beto']").value(28))
+				.andExpect(jsonPath("$.ganadores", contains("empate-ana", "empate-beto")));
 	}
 
 	@ParameterizedTest
@@ -449,7 +529,7 @@ class PartidasPrueba {
 		String beto = jugadorNuevo("lleno-beto");
 		String codigo = rondaEnCurso(ana, beto);
 
-		turno(ana, codigo, 1, true, null).andExpect(jsonPath("$.ronda").value(1));
+		turno(ana, codigo, 1, true, 1).andExpect(jsonPath("$.ronda").value(1));
 		turno(beto, codigo, 1, false, null)
 				.andExpect(jsonPath("$.ronda").value(2))
 				.andExpect(jsonPath("$.terminada").value(false));
@@ -463,11 +543,11 @@ class PartidasPrueba {
 				.andExpect(jsonPath("$.terminada").value(true))
 				.andExpect(jsonPath("$.motivoFin").value("sin_tableros"))
 				.andExpect(jsonPath("$.ronda").value(3))
-				.andExpect(jsonPath("$.puntos").isEmpty())
-				.andExpect(jsonPath("$.meta").value(0))
-				.andExpect(jsonPath("$.ganadores", hasSize(0)));
+				.andExpect(jsonPath("$.puntos['lleno-ana']").value(8))
+				.andExpect(jsonPath("$.meta").value(26))
+				.andExpect(jsonPath("$.ganadores", contains("lleno-ana")));
 
-		turno(ana, codigo, 3, false, 2).andExpect(jsonPath("$.zonas").isEmpty());
+		turno(ana, codigo, 3, false, 2).andExpect(jsonPath("$.zonas['2']").doesNotExist());
 		crear(ana, 1, 2).andExpect(status().isCreated());
 	}
 

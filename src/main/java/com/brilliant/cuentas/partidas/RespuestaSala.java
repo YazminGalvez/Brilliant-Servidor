@@ -42,7 +42,7 @@ public record RespuestaSala(
 		List<Integer> miTablero = propio == null ? List.of() : propio.tablero();
 		return new RespuestaSala(sala.codigo(), sala.mapa(), sala.capacidad(), sala.nombreAnfitrion(), jugadores,
 				sala.comenzada(), sala.terminada(), sala.ronda(), sala.dados(), miTablero, copiaDeZonas(sala),
-				Puntuacion.calcular(sala.mapa(), sala.zonas()), 0, List.of(), sala.motivoFin());
+				Puntuacion.calcular(sala.mapa(), sala.zonas()), sala.meta(), sala.ganadores(), sala.motivoFin());
 	}
 
 	private static Map<String, Map<String, Integer>> copiaDeZonas(Sala sala) {

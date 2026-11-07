@@ -19,8 +19,10 @@ public class Sala {
 	private int ronda;
 	private List<Integer> dados = List.of();
 	private final Map<Integer, Map<String, Integer>> zonas = new TreeMap<>();
+	private int jugadoresAlComenzar;
 	private boolean terminada;
 	private String motivoFin;
+	private List<String> ganadores = List.of();
 
 	public Sala(String codigo, int mapa, int capacidad, JugadorEnSala anfitrion) {
 		this.codigo = codigo;
@@ -88,9 +90,18 @@ public class Sala {
 		return motivoFin;
 	}
 
-	public void terminar(String motivo) {
+	public int meta() {
+		return comenzada ? Puntuacion.meta(jugadoresAlComenzar) : 0;
+	}
+
+	public List<String> ganadores() {
+		return ganadores;
+	}
+
+	public void terminar(String motivo, List<String> ganadores) {
 		terminada = true;
 		motivoFin = motivo;
+		this.ganadores = List.copyOf(ganadores);
 	}
 
 	public Map<Integer, Map<String, Integer>> zonas() {
@@ -135,8 +146,9 @@ public class Sala {
 	}
 
 	private void comenzarSiTodosListos() {
-		if (jugadores.size() >= 2 && jugadores.values().stream().allMatch(JugadorEnSala::listo)) {
+		if (!comenzada && jugadores.size() >= 2 && jugadores.values().stream().allMatch(JugadorEnSala::listo)) {
 			comenzada = true;
+			jugadoresAlComenzar = jugadores.size();
 		}
 	}
 }

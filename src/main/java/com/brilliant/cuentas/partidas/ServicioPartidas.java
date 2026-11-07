@@ -26,6 +26,7 @@ public class ServicioPartidas {
 
 	public static final Duration TOLERANCIA_CONEXION = Duration.ofSeconds(15);
 	private static final Set<Integer> NUMEROS_TABLERO = Set.of(1, 2, 3, 4, 5, 6);
+	private static final String FIN_META = "meta";
 	private static final String FIN_SIN_TABLEROS = "sin_tableros";
 
 	private final Map<String, Sala> salas = new HashMap<>();
@@ -199,8 +200,11 @@ public class ServicioPartidas {
 		if (!sala.todosTerminaronLaRonda()) {
 			return;
 		}
-		if (sala.todosLlenaronSuTablero()) {
-			sala.terminar(FIN_SIN_TABLEROS);
+		Map<String, Integer> puntos = Puntuacion.calcular(sala.mapa(), sala.zonas());
+		List<String> nombres = sala.jugadores().stream().map(JugadorEnSala::nombre).toList();
+		boolean llegoALaMeta = nombres.stream().anyMatch(nombre -> puntos.getOrDefault(nombre, 0) >= sala.meta());
+		if (llegoALaMeta || sala.todosLlenaronSuTablero()) {
+			sala.terminar(llegoALaMeta ? FIN_META : FIN_SIN_TABLEROS, Puntuacion.ganadores(nombres, puntos));
 		} else {
 			sala.comenzarRonda(dados.lanzar(), dados.lanzar());
 		}

@@ -58,6 +58,26 @@ class PuntuacionPrueba {
 	}
 
 	@Test
+	void laMetaDependeDeLaCantidadDeJugadores() {
+		assertThat(Puntuacion.meta(2)).isEqualTo(26);
+		assertThat(Puntuacion.meta(3)).isEqualTo(24);
+		assertThat(Puntuacion.meta(4)).isEqualTo(22);
+		assertThat(Puntuacion.meta(5)).isEqualTo(20);
+		assertThat(Puntuacion.meta(6)).isEqualTo(20);
+	}
+
+	@Test
+	void ganaQuienTieneMasPuntosYLosEmpatadosTambien() {
+		List<String> jugadores = List.of("ana", "beto", "ciro", "dora");
+
+		assertThat(Puntuacion.ganadores(jugadores, Map.of("ana", 12, "beto", 30, "ciro", 7)))
+				.containsExactly("beto");
+		assertThat(Puntuacion.ganadores(jugadores, Map.of("ana", 26, "beto", 12, "ciro", 26)))
+				.containsExactly("ana", "ciro");
+		assertThat(Puntuacion.ganadores(jugadores, Map.of())).containsExactly("ana", "beto", "ciro", "dora");
+	}
+
+	@Test
 	void sinZonasNoHayPuntos() {
 		assertThat(Puntuacion.calcular(2, Map.of())).isEmpty();
 	}
