@@ -27,6 +27,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -239,8 +240,44 @@ class PartidasPrueba {
 
 	static Stream<Arguments> datosInvalidos() {
 		return Stream.of(
-				Arguments.of(0, 4), Arguments.of(5, 4), Arguments.of(1, 1), Arguments.of(1, 7),
-				Arguments.of(null, 4), Arguments.of(1, null));
+				Arguments.of(1, 1), Arguments.of(1, 7), Arguments.of(null, 4), Arguments.of(1, null),
+				Arguments.of(0, 1));
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = {0, 5, -1, 99})
+	void mapaFueraDeLaTablaResponde400MapaNoDisponible(int mapa) throws Exception {
+		String token = jugadorNuevo("sin-mapa-" + (mapa + 10));
+		crear(token, mapa, 2)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("MAPA_NO_DISPONIBLE"));
+		actual(token).andExpect(status().isNoContent());
+	}
+
+	@Test
+	void losPuntosSeCalculanPorLugarEnCadaZona() throws Exception {
+		String ana = jugadorNuevo("puntos-ana");
+		String beto = jugadorNuevo("puntos-beto");
+		String ciro = jugadorNuevo("puntos-ciro");
+		String codigo = rondaEnCurso(ana, beto, ciro);
+		consultar(ana, codigo).andExpect(jsonPath("$.puntos").isEmpty());
+
+		turno(ana, codigo, 1, false, 1).andExpect(status().isOk());
+		turno(beto, codigo, 1, false, 1).andExpect(status().isOk());
+		turno(ciro, codigo, 1, false, null)
+				.andExpect(jsonPath("$.puntos['puntos-ana']").value(8))
+				.andExpect(jsonPath("$.puntos['puntos-beto']").value(8))
+				.andExpect(jsonPath("$.puntos['puntos-ciro']").doesNotExist());
+
+		turno(ana, codigo, 2, false, 2).andExpect(status().isOk());
+		turno(beto, codigo, 2, false, null).andExpect(status().isOk());
+		turno(ciro, codigo, 2, false, 1)
+				.andExpect(jsonPath("$.ronda").value(3))
+				.andExpect(jsonPath("$.puntos['puntos-ana']").value(8 + 4))
+				.andExpect(jsonPath("$.puntos['puntos-beto']").value(8))
+				.andExpect(jsonPath("$.puntos['puntos-ciro']").value(6))
+				.andExpect(jsonPath("$.meta").value(0))
+				.andExpect(jsonPath("$.ganadores", hasSize(0)));
 	}
 
 	@ParameterizedTest
@@ -444,6 +481,7 @@ class PartidasPrueba {
 				Map.<String, Object>of("tableroLleno", false),
 				Map.<String, Object>of("ronda", 1),
 				Map.<String, Object>of("ronda", 1, "tableroLleno", false, "zona", 0),
+				Map.<String, Object>of("ronda", 1, "tableroLleno", false, "zona", 10),
 				Map.<String, Object>of("ronda", 1, "tableroLleno", false, "zona", 50))) {
 			mockMvc.perform(con(post("/api/v1/partidas/" + codigo + "/turno"), ana)
 							.contentType(MediaType.APPLICATION_JSON).content(json(cuerpo)))

@@ -26,8 +26,6 @@ public class ServicioPartidas {
 
 	public static final Duration TOLERANCIA_CONEXION = Duration.ofSeconds(15);
 	private static final Set<Integer> NUMEROS_TABLERO = Set.of(1, 2, 3, 4, 5, 6);
-	// El tablero es de 7x7: no puede haber más zonas que celdas.
-	private static final int ZONA_MAXIMA = 49;
 	private static final String FIN_SIN_TABLEROS = "sin_tableros";
 
 	private final Map<String, Sala> salas = new HashMap<>();
@@ -53,8 +51,11 @@ public class ServicioPartidas {
 	}
 
 	public RespuestaSala crear(UUID usuarioId, Integer mapa, Integer jugadores) {
-		if (mapa == null || jugadores == null || mapa < 1 || mapa > 4 || jugadores < 2 || jugadores > 6) {
+		if (mapa == null || jugadores == null || jugadores < 2 || jugadores > 6) {
 			throw new SolicitudInvalidaExcepcion(CodigoError.DATOS_INVALIDOS);
+		}
+		if (!PuntosPorMapa.existe(mapa)) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.MAPA_NO_DISPONIBLE);
 		}
 		String nombre = servicioCuentas.obtenerCuenta(usuarioId).nombre();
 
@@ -159,7 +160,8 @@ public class ServicioPartidas {
 			Boolean tableroLleno, Integer zona) {
 		atender(usuarioId);
 		Sala sala = salaDeJugador(usuarioId, codigo);
-		if (ronda == null || tableroLleno == null || (zona != null && (zona < 1 || zona > ZONA_MAXIMA))) {
+		if (ronda == null || tableroLleno == null
+				|| (zona != null && (zona < 1 || zona > PuntosPorMapa.cantidadZonas(sala.mapa())))) {
 			throw new SolicitudInvalidaExcepcion(CodigoError.DATOS_INVALIDOS);
 		}
 		if (!sala.comenzada()) {

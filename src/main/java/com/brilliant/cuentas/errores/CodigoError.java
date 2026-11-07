@@ -17,6 +17,7 @@ public enum CodigoError {
 	NO_AUTORIZADO(HttpStatus.UNAUTHORIZED, "Se requiere iniciar sesión."),
 	ACCESO_DENEGADO(HttpStatus.FORBIDDEN, "No tienes permiso para esta acción."),
 	DATOS_INVALIDOS(HttpStatus.BAD_REQUEST, "Los datos de la partida no son válidos."),
+	MAPA_NO_DISPONIBLE(HttpStatus.BAD_REQUEST, "El mapa no está disponible."),
 	PARTIDA_NO_ENCONTRADA(HttpStatus.NOT_FOUND, "La partida no existe."),
 	PARTIDA_LLENA(HttpStatus.CONFLICT, "La partida ya está llena."),
 	PARTIDA_COMENZADA(HttpStatus.CONFLICT, "La partida ya comenzó."),
