@@ -22,3 +22,6 @@ cuentas:
   bloqueo-segundos: ${BLOQUEO_SEGUNDOS:300}
   max-failed-codes: ${MAX_CODIGOS_FALLIDOS:10}
   room-idle-seconds: ${SEGUNDOS_SIN_CONTACTO_SALA:120}
+  disconnect-seconds: ${SEGUNDOS_DESCONEXION:15}
+  abandon-seconds: ${SEGUNDOS_ABANDONO:120}
+  finished-room-seconds: ${SEGUNDOS_SALA_TERMINADA:600}

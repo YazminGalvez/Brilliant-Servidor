@@ -205,6 +205,13 @@ class PartidasPrueba {
 		return codigo;
 	}
 
+	private void esperarConsultando(String token, String codigo, int segundos) throws Exception {
+		for (int pasados = 0; pasados < segundos; pasados += 5) {
+			reloj.avanzar(Duration.ofSeconds(Math.min(5, segundos - pasados)));
+			consultar(token, codigo).andExpect(status().isOk());
+		}
+	}
+
 	private static void esperarNoEncontrada(ResultActions resultado) throws Exception {
 		resultado.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.codigo").value("PARTIDA_NO_ENCONTRADA"));
@@ -1167,12 +1174,132 @@ class PartidasPrueba {
 		String codigo = codigoNuevo(anfitrion, 2);
 		unirse(invitado, codigo).andExpect(status().isOk());
 
-		reloj.avanzar(ServicioPartidas.TOLERANCIA_CONEXION);
+		esperarConsultando(anfitrion, codigo, 10);
+		consultar(anfitrion, codigo).andExpect(jsonPath("$.jugadores[1].conectado").value(true));
+		esperarConsultando(anfitrion, codigo, 5);
 		consultar(anfitrion, codigo)
 				.andExpect(jsonPath("$.jugadores[0].conectado").value(true))
 				.andExpect(jsonPath("$.jugadores[1].conectado").value(false));
 
 		consultar(invitado, codigo).andExpect(jsonPath("$.jugadores[1].conectado").value(true));
+	}
+
+	@Test
+	void unJugadorSinContactoSeDesconectaYVuelveAlContactar() throws Exception {
+		String ana = jugadorNuevo("red-ana");
+		String beto = jugadorNuevo("red-beto");
+		String codigo = rondaEnCurso(ana, beto);
+
+		esperarConsultando(ana, codigo, 10);
+		consultar(ana, codigo).andExpect(jsonPath("$.jugadores[*].conectado", contains(true, true)));
+		esperarConsultando(ana, codigo, 5);
+		consultar(ana, codigo).andExpect(jsonPath("$.jugadores[*].conectado", contains(true, false)));
+
+		consultar(beto, codigo).andExpect(jsonPath("$.jugadores[*].conectado", contains(true, true)));
+	}
+
+	@Test
+	void laRondaAvanzaSinElDesconectado() throws Exception {
+		String ana = jugadorNuevo("sigue-ana");
+		String beto = jugadorNuevo("sigue-beto");
+		String codigo = rondaEnCurso(ana, beto);
+		turno(ana, codigo, 1, false, null).andExpect(jsonPath("$.ronda").value(1));
+
+		esperarConsultando(ana, codigo, 10);
+		consultar(ana, codigo).andExpect(jsonPath("$.ronda").value(1));
+		esperarConsultando(ana, codigo, 5);
+
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.ronda").value(2))
+				.andExpect(jsonPath("$.jugadores[1].conectado").value(false))
+				.andExpect(jsonPath("$.jugadores[1].concedio").value(false))
+				.andExpect(jsonPath("$.terminada").value(false));
+	}
+
+	@Test
+	void quienVuelveConservaSuTableroYSusZonas() throws Exception {
+		String ana = jugadorNuevo("vuelve-ana");
+		String beto = jugadorNuevo("vuelve-beto");
+		String codigo = rondaEnCurso(ana, beto);
+		tablero(beto, codigo, TABLERO).andExpect(status().isOk());
+		turno(beto, codigo, 1, false, 3).andExpect(status().isOk());
+		turno(ana, codigo, 1, false, null).andExpect(jsonPath("$.ronda").value(2));
+
+		turno(ana, codigo, 2, false, null).andExpect(jsonPath("$.ronda").value(2));
+		esperarConsultando(ana, codigo, 15);
+		consultar(ana, codigo).andExpect(jsonPath("$.ronda").value(3));
+
+		unirse(beto, codigo)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ronda").value(3))
+				.andExpect(jsonPath("$.miTablero", contains(1, 2, 3, 4, 5, 6)))
+				.andExpect(jsonPath("$.zonas['3']['vuelve-beto']").value(1))
+				.andExpect(jsonPath("$.jugadores[1].conectado").value(true));
+		turno(beto, codigo, 2, false, 4)
+				.andExpect(jsonPath("$.jugadores[1].jugoRonda").value(false))
+				.andExpect(jsonPath("$.zonas['4']").doesNotExist());
+		turno(beto, codigo, 3, false, null).andExpect(jsonPath("$.jugadores[1].jugoRonda").value(true));
+	}
+
+	@Test
+	void sinContactoPorDosMinutosSeTrataComoAbandono() throws Exception {
+		String ana = jugadorNuevo("aband-ana");
+		String beto = jugadorNuevo("aband-beto");
+		String codigo = rondaEnCurso(ana, beto);
+
+		esperarConsultando(ana, codigo, 115);
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.terminada").value(false))
+				.andExpect(jsonPath("$.jugadores[1].concedio").value(false));
+		esperarConsultando(ana, codigo, 5);
+
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.terminada").value(true))
+				.andExpect(jsonPath("$.motivoFin").value("abandono"))
+				.andExpect(jsonPath("$.jugadores[1].concedio").value(true))
+				.andExpect(jsonPath("$.ganadores", contains("aband-ana")));
+	}
+
+	@Test
+	void elSilencioDeTodosNoMarcaANadie() throws Exception {
+		String ana = jugadorNuevo("calla-ana");
+		String beto = jugadorNuevo("calla-beto");
+		String codigo = rondaEnCurso(ana, beto);
+		turno(ana, codigo, 1, false, null).andExpect(status().isOk());
+
+		reloj.avanzar(Duration.ofSeconds(60));
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.jugadores[*].conectado", contains(true, true)))
+				.andExpect(jsonPath("$.ronda").value(1));
+
+		reloj.avanzar(Duration.ofSeconds(300));
+		consultar(beto, codigo)
+				.andExpect(jsonPath("$.jugadores[*].conectado", contains(true, true)))
+				.andExpect(jsonPath("$.jugadores[*].concedio", contains(false, false)))
+				.andExpect(jsonPath("$.terminada").value(false));
+	}
+
+	@Test
+	void unaSalaTerminadaSeBorraConElTiempoOCuandoSalenTodos() throws Exception {
+		String ana = jugadorNuevo("borra-ana");
+		String beto = jugadorNuevo("borra-beto");
+		String codigo = rondaEnCurso(ana, beto);
+		conceder(beto, codigo).andExpect(jsonPath("$.terminada").value(true));
+
+		reloj.avanzar(Duration.ofSeconds(599));
+		consultar(ana, codigo).andExpect(status().isOk());
+		reloj.avanzar(Duration.ofSeconds(1));
+		esperarNoEncontrada(consultar(ana, codigo));
+		actual(beto).andExpect(status().isNoContent());
+
+		String ciro = jugadorNuevo("borra-ciro");
+		String dora = jugadorNuevo("borra-dora");
+		String otra = rondaEnCurso(ciro, dora);
+		conceder(dora, otra).andExpect(jsonPath("$.terminada").value(true));
+		salir(ciro, otra).andExpect(status().isNoContent());
+		consultar(dora, otra).andExpect(status().isOk());
+		salir(dora, otra).andExpect(status().isNoContent());
+		esperarNoEncontrada(consultar(dora, otra));
 	}
 
 	@Test

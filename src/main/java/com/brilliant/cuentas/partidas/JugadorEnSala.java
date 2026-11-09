@@ -10,16 +10,16 @@ public class JugadorEnSala {
 	private final UUID usuarioId;
 	private final String nombre;
 	private Instant ultimaSenal;
+	private Instant ultimaSenalDeJuego;
 	private boolean listo;
 	private List<Integer> tablero;
 	private int rondaJugada;
 	private boolean tableroLleno;
 	private boolean concedio;
 
-	public JugadorEnSala(UUID usuarioId, String nombre, Instant ultimaSenal) {
+	public JugadorEnSala(UUID usuarioId, String nombre) {
 		this.usuarioId = usuarioId;
 		this.nombre = nombre;
-		this.ultimaSenal = ultimaSenal;
 	}
 
 	public UUID usuarioId() {
@@ -75,11 +75,16 @@ public class JugadorEnSala {
 		tableroLleno = tableroLleno || lleno;
 	}
 
-	public void registrarSenal(Instant momento) {
+	void registrarSenal(Instant momento, Instant momentoDeJuego) {
 		ultimaSenal = momento;
+		ultimaSenalDeJuego = momentoDeJuego;
 	}
 
-	public boolean conectadoEn(Instant momento, Duration tolerancia) {
-		return momento.isBefore(ultimaSenal.plus(tolerancia));
+	public boolean contactoReciente(Instant momento, Duration limite) {
+		return momento.isBefore(ultimaSenal.plus(limite));
+	}
+
+	Duration ausenciaDeJuego(Instant momentoDeJuego) {
+		return Duration.between(ultimaSenalDeJuego, momentoDeJuego);
 	}
 }

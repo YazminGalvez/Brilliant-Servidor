@@ -33,10 +33,10 @@ public record RespuestaSala(
 			boolean jugoRonda) {
 	}
 
-	public static RespuestaSala de(Sala sala, UUID usuarioId, Instant ahora, Duration toleranciaConexion) {
+	public static RespuestaSala de(Sala sala, UUID usuarioId, Instant ahora, Duration desconexion) {
 		List<Jugador> jugadores = sala.jugadores().stream()
 				.map(jugador -> new Jugador(jugador.nombre(), jugador.listo(), jugador.tableroListo(),
-						jugador.conectadoEn(ahora, toleranciaConexion), jugador.concedio(),
+						sala.conectado(jugador, ahora, desconexion), jugador.concedio(),
 						jugador.jugoRonda(sala.ronda())))
 				.toList();
 		JugadorEnSala propio = sala.jugador(usuarioId);

@@ -49,7 +49,7 @@ class ServicioPartidasPrueba {
 
 	private ServicioPartidas servicio(CodigoSala generador, long segundosSinContacto) {
 		return new ServicioPartidas(cuentasFalsas(), new LimitadorCodigos(reloj, 10), generador,
-				new LanzadorDados(new Random(7)), reloj, segundosSinContacto);
+				new LanzadorDados(new Random(7)), reloj, new TiemposSala(segundosSinContacto, 15, 120, 600));
 	}
 
 	@Test
@@ -79,10 +79,13 @@ class ServicioPartidasPrueba {
 	}
 
 	@Test
-	void rechazaSegundosSinContactoNoPositivos() {
-		assertThatThrownBy(() -> servicio(new CodigoSala(), 0))
+	void rechazaTiemposNoPositivos() {
+		assertThatThrownBy(() -> new TiemposSala(0, 15, 120, 600)).hasMessageContaining("SEGUNDOS_SIN_CONTACTO_SALA");
+		assertThatThrownBy(() -> new TiemposSala(120, 0, 120, 600)).hasMessageContaining("SEGUNDOS_DESCONEXION");
+		assertThatThrownBy(() -> new TiemposSala(120, 15, -1, 600)).hasMessageContaining("SEGUNDOS_ABANDONO");
+		assertThatThrownBy(() -> new TiemposSala(120, 15, 120, 0))
 				.isInstanceOf(IllegalStateException.class)
-				.hasMessageContaining("SEGUNDOS_SIN_CONTACTO_SALA");
+				.hasMessageContaining("SEGUNDOS_SALA_TERMINADA");
 	}
 
 	@Test
