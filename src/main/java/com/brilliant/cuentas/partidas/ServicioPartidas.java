@@ -27,6 +27,7 @@ public class ServicioPartidas {
 	public static final Duration TOLERANCIA_CONEXION = Duration.ofSeconds(15);
 	private static final Set<Integer> NUMEROS_TABLERO = Set.of(1, 2, 3, 4, 5, 6);
 	private static final String FIN_META = "meta";
+	private static final String FIN_ABANDONO = "abandono";
 	private static final String FIN_SIN_TABLEROS = "sin_tableros";
 
 	private final Map<String, Sala> salas = new HashMap<>();
@@ -96,6 +97,11 @@ public class ServicioPartidas {
 			JugadorEnSala existente = sala.jugador(usuarioId);
 			if (existente != null) {
 				existente.registrarSenal(ahora);
+				if (!sala.codigo().equals(salaPorUsuario.get(usuarioId))) {
+					comprobarQueNoEstaEnPartidaComenzada(usuarioId);
+					sacarDeSalaActual(usuarioId);
+					salaPorUsuario.put(usuarioId, sala.codigo());
+				}
 			} else {
 				comprobarQueNoEstaEnPartidaComenzada(usuarioId);
 				if (sala.comenzada()) {
@@ -173,10 +179,33 @@ public class ServicioPartidas {
 		return consultarComoJugador(sala, usuarioId);
 	}
 
+	public synchronized RespuestaSala conceder(UUID usuarioId, String codigo) {
+		atender(usuarioId);
+		Sala sala = salaDeJugador(usuarioId, codigo);
+		if (!sala.comenzada()) {
+			throw new SolicitudInvalidaExcepcion(CodigoError.PARTIDA_NO_COMENZADA);
+		}
+		concederEn(sala, usuarioId);
+		return consultarComoJugador(sala, usuarioId);
+	}
+
 	public synchronized void salir(UUID usuarioId, String codigo) {
 		atender(usuarioId);
-		salaDeJugador(usuarioId, codigo);
-		sacarDeSalaActual(usuarioId);
+		sacarDeSala(salaDeJugador(usuarioId, codigo), usuarioId);
+	}
+
+	private void concederEn(Sala sala, UUID usuarioId) {
+		JugadorEnSala jugador = sala.jugador(usuarioId);
+		if (sala.terminada() || jugador.concedio()) {
+			return;
+		}
+		jugador.conceder();
+		List<JugadorEnSala> activos = sala.activos();
+		if (activos.size() <= 1) {
+			sala.terminar(FIN_ABANDONO, activos.stream().map(JugadorEnSala::nombre).toList());
+		} else {
+			avanzarSiCorresponde(sala);
+		}
 	}
 
 	private Sala salaDeJugador(UUID usuarioId, String codigo) {
@@ -188,7 +217,7 @@ public class ServicioPartidas {
 	}
 
 	private void avanzarSiCorresponde(Sala sala) {
-		if (!sala.comenzada() || sala.terminada() || sala.jugadores().isEmpty()) {
+		if (!sala.comenzada() || sala.terminada() || sala.activos().isEmpty()) {
 			return;
 		}
 		if (sala.ronda() == 0) {
@@ -201,7 +230,7 @@ public class ServicioPartidas {
 			return;
 		}
 		Map<String, Integer> puntos = Puntuacion.calcular(sala.mapa(), sala.zonas());
-		List<String> nombres = sala.jugadores().stream().map(JugadorEnSala::nombre).toList();
+		List<String> nombres = sala.activos().stream().map(JugadorEnSala::nombre).toList();
 		boolean llegoALaMeta = nombres.stream().anyMatch(nombre -> puntos.getOrDefault(nombre, 0) >= sala.meta());
 		if (llegoALaMeta || sala.todosLlenaronSuTablero()) {
 			sala.terminar(llegoALaMeta ? FIN_META : FIN_SIN_TABLEROS, Puntuacion.ganadores(nombres, puntos));
@@ -232,7 +261,7 @@ public class ServicioPartidas {
 	private void comprobarQueNoEstaEnPartidaComenzada(UUID usuarioId) {
 		String codigo = salaPorUsuario.get(usuarioId);
 		Sala sala = codigo == null ? null : salas.get(codigo);
-		if (sala != null && sala.comenzada() && !sala.terminada()) {
+		if (sala != null && sala.comenzada() && !sala.terminada() && !sala.jugador(usuarioId).concedio()) {
 			throw new SolicitudInvalidaExcepcion(CodigoError.YA_EN_PARTIDA);
 		}
 	}
@@ -248,21 +277,36 @@ public class ServicioPartidas {
 	}
 
 	private void sacarDeSalaActual(UUID usuarioId) {
-		String codigo = salaPorUsuario.remove(usuarioId);
+		String codigo = salaPorUsuario.get(usuarioId);
 		Sala sala = codigo == null ? null : salas.get(codigo);
 		if (sala == null) {
+			salaPorUsuario.remove(usuarioId);
 			return;
 		}
-		if (sala.esAnfitrion(usuarioId) && !sala.comenzada()) {
-			cerrar(sala);
-			return;
-		}
-		sala.quitar(usuarioId);
-		if (sala.jugadores().isEmpty()) {
-			salas.remove(codigo);
+		sacarDeSala(sala, usuarioId);
+	}
+
+	// Con la partida en juego, quien sale concede y sigue en la lista para que los demás vean que se rindió.
+	private void sacarDeSala(Sala sala, UUID usuarioId) {
+		salaPorUsuario.remove(usuarioId, sala.codigo());
+		if (!sala.comenzada()) {
+			if (sala.esAnfitrion(usuarioId)) {
+				cerrar(sala);
+				return;
+			}
+			sala.quitar(usuarioId);
+		} else if (sala.terminada()) {
+			sala.quitar(usuarioId);
 		} else {
-			avanzarSiCorresponde(sala);
+			concederEn(sala, usuarioId);
 		}
+		if (sala.jugadores().stream().noneMatch(jugador -> estaVinculado(jugador, sala))) {
+			salas.remove(sala.codigo());
+		}
+	}
+
+	private boolean estaVinculado(JugadorEnSala jugador, Sala sala) {
+		return sala.codigo().equals(salaPorUsuario.get(jugador.usuarioId()));
 	}
 
 	private void cerrar(Sala sala) {

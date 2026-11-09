@@ -36,7 +36,8 @@ public record RespuestaSala(
 	public static RespuestaSala de(Sala sala, UUID usuarioId, Instant ahora, Duration toleranciaConexion) {
 		List<Jugador> jugadores = sala.jugadores().stream()
 				.map(jugador -> new Jugador(jugador.nombre(), jugador.listo(), jugador.tableroListo(),
-						jugador.conectadoEn(ahora, toleranciaConexion), false, jugador.jugoRonda(sala.ronda())))
+						jugador.conectadoEn(ahora, toleranciaConexion), jugador.concedio(),
+						jugador.jugoRonda(sala.ronda())))
 				.toList();
 		JugadorEnSala propio = sala.jugador(usuarioId);
 		List<Integer> miTablero = propio == null ? List.of() : propio.tablero();

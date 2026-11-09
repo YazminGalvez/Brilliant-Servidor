@@ -14,6 +14,7 @@ public class JugadorEnSala {
 	private List<Integer> tablero;
 	private int rondaJugada;
 	private boolean tableroLleno;
+	private boolean concedio;
 
 	public JugadorEnSala(UUID usuarioId, String nombre, Instant ultimaSenal) {
 		this.usuarioId = usuarioId;
@@ -57,8 +58,16 @@ public class JugadorEnSala {
 		return ronda > 0 && rondaJugada == ronda;
 	}
 
+	public boolean concedio() {
+		return concedio;
+	}
+
+	public void conceder() {
+		concedio = true;
+	}
+
 	public boolean terminoRonda(int ronda) {
-		return tableroLleno || jugoRonda(ronda);
+		return concedio || tableroLleno || jugoRonda(ronda);
 	}
 
 	public void terminarTurno(int ronda, boolean lleno) {

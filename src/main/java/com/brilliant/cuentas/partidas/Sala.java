@@ -73,8 +73,12 @@ public class Sala {
 		return dados;
 	}
 
+	public List<JugadorEnSala> activos() {
+		return jugadores.values().stream().filter(jugador -> !jugador.concedio()).toList();
+	}
+
 	public boolean todosTienenTablero() {
-		return jugadores.values().stream().allMatch(JugadorEnSala::tableroListo);
+		return activos().stream().allMatch(JugadorEnSala::tableroListo);
 	}
 
 	public void comenzarRonda(int primerDado, int segundoDado) {
@@ -124,7 +128,7 @@ public class Sala {
 	}
 
 	public boolean todosLlenaronSuTablero() {
-		return jugadores.values().stream().allMatch(JugadorEnSala::tableroLleno);
+		return activos().stream().allMatch(JugadorEnSala::tableroLleno);
 	}
 
 	public void marcarListo(UUID usuarioId, boolean listo) {

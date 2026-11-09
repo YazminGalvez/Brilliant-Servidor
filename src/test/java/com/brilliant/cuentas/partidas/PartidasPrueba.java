@@ -163,6 +163,10 @@ class PartidasPrueba {
 		return mockMvc.perform(con(post("/api/v1/partidas/" + codigo + "/salir"), token));
 	}
 
+	private ResultActions conceder(String token, String codigo) throws Exception {
+		return mockMvc.perform(con(post("/api/v1/partidas/" + codigo + "/conceder"), token));
+	}
+
 	private ResultActions tablero(String token, String codigo, List<Integer> numeros) throws Exception {
 		Map<String, List<Integer>> cuerpo = new HashMap<>();
 		cuerpo.put("numeros", numeros);
@@ -299,6 +303,129 @@ class PartidasPrueba {
 	}
 
 	@Test
+	void concederDejaUnSoloJugadorYTerminaConElComoGanador() throws Exception {
+		String ana = jugadorNuevo("rinde-ana");
+		String beto = jugadorNuevo("rinde-beto");
+		String codigo = rondaEnCurso(ana, beto);
+
+		conceder(beto, codigo)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.jugadores[*].concedio", contains(false, true)))
+				.andExpect(jsonPath("$.terminada").value(true))
+				.andExpect(jsonPath("$.motivoFin").value("abandono"))
+				.andExpect(jsonPath("$.ganadores", contains("rinde-ana")));
+
+		conceder(ana, codigo)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.jugadores[*].concedio", contains(false, true)))
+				.andExpect(jsonPath("$.ganadores", contains("rinde-ana")));
+		crear(beto, 1, 2).andExpect(status().isCreated());
+	}
+
+	@Test
+	void elAnfitrionPuedeConcederYLaPartidaSigue() throws Exception {
+		String ana = jugadorNuevo("jefa-ana");
+		String beto = jugadorNuevo("jefa-beto");
+		String ciro = jugadorNuevo("jefa-ciro");
+		String codigo = rondaEnCurso(ana, beto, ciro);
+
+		conceder(ana, codigo)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.jugadores[0].concedio").value(true))
+				.andExpect(jsonPath("$.terminada").value(false))
+				.andExpect(jsonPath("$.anfitrion").value("jefa-ana"));
+
+		turno(beto, codigo, 1, false, null).andExpect(jsonPath("$.ronda").value(1));
+		turno(ciro, codigo, 1, false, null).andExpect(jsonPath("$.ronda").value(2));
+		consultar(ana, codigo).andExpect(jsonPath("$.ronda").value(2));
+	}
+
+	@Test
+	void concederDosVecesNoCambiaNada() throws Exception {
+		String ana = jugadorNuevo("doble-ana");
+		String beto = jugadorNuevo("doble-beto");
+		String ciro = jugadorNuevo("doble-ciro");
+		String codigo = rondaEnCurso(ana, beto, ciro);
+
+		conceder(ciro, codigo).andExpect(jsonPath("$.jugadores[*].concedio", contains(false, false, true)));
+		conceder(ciro, codigo)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.jugadores[*].concedio", contains(false, false, true)))
+				.andExpect(jsonPath("$.terminada").value(false));
+		turno(ciro, codigo, 1, false, 1)
+				.andExpect(jsonPath("$.jugadores[2].jugoRonda").value(false))
+				.andExpect(jsonPath("$.zonas").isEmpty());
+	}
+
+	@Test
+	void quienConcedioNoPuedeGanarAunqueTengaMasPuntos() throws Exception {
+		String ana = jugadorNuevo("pierde-ana");
+		String beto = jugadorNuevo("pierde-beto");
+		String ciro = jugadorNuevo("pierde-ciro");
+		String codigo = rondaEnCurso(ana, beto, ciro);
+		turno(ana, codigo, 1, false, 1).andExpect(status().isOk());
+		turno(beto, codigo, 1, false, 2).andExpect(status().isOk());
+		turno(ciro, codigo, 1, false, null).andExpect(jsonPath("$.ronda").value(2));
+
+		conceder(ana, codigo).andExpect(jsonPath("$.terminada").value(false));
+		turno(beto, codigo, 2, true, null).andExpect(status().isOk());
+		turno(ciro, codigo, 2, true, null)
+				.andExpect(jsonPath("$.terminada").value(true))
+				.andExpect(jsonPath("$.motivoFin").value("sin_tableros"))
+				.andExpect(jsonPath("$.puntos['pierde-ana']").value(8))
+				.andExpect(jsonPath("$.puntos['pierde-beto']").value(4))
+				.andExpect(jsonPath("$.ganadores", contains("pierde-beto")));
+	}
+
+	@Test
+	void laRondaAvanzaSinQuienConcedio() throws Exception {
+		String ana = jugadorNuevo("avanza-ana");
+		String beto = jugadorNuevo("avanza-beto");
+		String ciro = jugadorNuevo("avanza-ciro");
+		String codigo = rondaEnCurso(ana, beto, ciro);
+		turno(ana, codigo, 1, false, null).andExpect(status().isOk());
+		turno(beto, codigo, 1, false, null).andExpect(jsonPath("$.ronda").value(1));
+
+		conceder(ciro, codigo)
+				.andExpect(jsonPath("$.ronda").value(2))
+				.andExpect(jsonPath("$.terminada").value(false));
+	}
+
+	@Test
+	void salirEnJuegoEquivaleAConceder() throws Exception {
+		String ana = jugadorNuevo("huye-ana");
+		String beto = jugadorNuevo("huye-beto");
+		String codigo = rondaEnCurso(ana, beto);
+
+		salir(beto, codigo).andExpect(status().isNoContent());
+
+		consultar(ana, codigo)
+				.andExpect(jsonPath("$.jugadores[*].concedio", contains(false, true)))
+				.andExpect(jsonPath("$.terminada").value(true))
+				.andExpect(jsonPath("$.motivoFin").value("abandono"))
+				.andExpect(jsonPath("$.ganadores", contains("huye-ana")));
+		actual(beto).andExpect(status().isNoContent());
+		crear(beto, 1, 2).andExpect(status().isCreated());
+	}
+
+	@Test
+	void concederAntesDeComenzarOAjenoResponde409O404() throws Exception {
+		String ana = jugadorNuevo("previo-ana");
+		String codigo = codigoNuevo(ana, 2);
+
+		conceder(ana, codigo)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("PARTIDA_NO_COMENZADA"));
+
+		String beto = jugadorNuevo("previo-beto");
+		String ciro = jugadorNuevo("previo-ciro");
+		String otra = rondaEnCurso(beto, ciro);
+		esperarNoEncontrada(conceder(ana, otra));
+		esperarNoEncontrada(conceder(beto, "ZZZZZZ"));
+		consultar(beto, otra).andExpect(jsonPath("$.jugadores[*].concedio", contains(false, false)));
+	}
+
+	@Test
 	void laMetaNoCambiaSiAlguienSale() throws Exception {
 		String ana = jugadorNuevo("fija-ana");
 		String beto = jugadorNuevo("fija-beto");
@@ -309,7 +436,8 @@ class PartidasPrueba {
 		salir(ciro, codigo).andExpect(status().isNoContent());
 
 		consultar(ana, codigo)
-				.andExpect(jsonPath("$.jugadores", hasSize(2)))
+				.andExpect(jsonPath("$.jugadores[*].concedio", contains(false, false, true)))
+				.andExpect(jsonPath("$.terminada").value(false))
 				.andExpect(jsonPath("$.meta").value(24));
 	}
 
@@ -433,6 +561,10 @@ class PartidasPrueba {
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.codigo").value("NO_AUTORIZADO"));
 		tablero("token-falso", "ABCDEF", TABLERO).andExpect(status().isUnauthorized());
+		mockMvc.perform(post("/api/v1/partidas/ABCDEF/conceder"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.codigo").value("NO_AUTORIZADO"));
+		conceder("token-falso", "ABCDEF").andExpect(status().isUnauthorized());
 		mockMvc.perform(post("/api/v1/partidas/ABCDEF/turno").contentType(MediaType.APPLICATION_JSON)
 						.content("{\"ronda\":1,\"tableroLleno\":false,\"zona\":null}"))
 				.andExpect(status().isUnauthorized())
@@ -746,9 +878,13 @@ class PartidasPrueba {
 		consultar(invitado, codigo)
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.anfitrion").value("vacia-ana"))
-				.andExpect(jsonPath("$.jugadores[*].nombre", contains("vacia-beto")));
+				.andExpect(jsonPath("$.jugadores[*].nombre", contains("vacia-ana", "vacia-beto")))
+				.andExpect(jsonPath("$.jugadores[*].concedio", contains(true, false)))
+				.andExpect(jsonPath("$.terminada").value(true));
+		actual(anfitrion).andExpect(status().isNoContent());
 
 		salir(invitado, codigo).andExpect(status().isNoContent());
+		esperarNoEncontrada(consultar(invitado, codigo));
 		esperarNoEncontrada(unirse(jugadorNuevo("vacia-ciro"), codigo));
 	}
 

@@ -62,6 +62,11 @@ public class PartidasControlador {
 				solicitud.zona());
 	}
 
+	@PostMapping("/{codigo}/conceder")
+	public RespuestaSala conceder(@AuthenticationPrincipal UsuarioAutenticado usuario, @PathVariable String codigo) {
+		return servicio.conceder(usuario.usuarioId(), codigo);
+	}
+
 	@PostMapping("/{codigo}/salir")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void salir(@AuthenticationPrincipal UsuarioAutenticado usuario, @PathVariable String codigo) {
